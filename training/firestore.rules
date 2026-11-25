@@ -20,7 +20,12 @@ service cloud.firestore {
         signedIn() && request.auth.uid == uid
         && request.auth.token.email == 'admin@hse.example.com'
         && request.resource.data.role == 'master'
-        && request.resource.data.active == true);
+        && request.resource.data.active == true) || (
+        signedIn() && request.auth.uid == uid
+        && request.resource.data.role == 'officer'
+        && request.resource.data.active == false
+        && request.resource.data.status == 'pending'
+        && request.resource.data.username != 'admin');
       allow update: if owner() || (master() && resource.data.username != 'admin');
       allow delete: if owner() && resource.data.username != 'admin';
     }
@@ -28,7 +33,8 @@ service cloud.firestore {
     match /logins/{username} {
       allow get: if true;
       allow list: if false;
-      allow create, update: if master() && username != 'admin';
+      allow create: if username != 'admin' && (master() || (signedIn() && request.resource.data.uid == request.auth.uid));
+      allow update: if master() && username != 'admin';
       allow delete: if owner();
     }
     // تسجيل العمال والاندكشن من الأدمن بس

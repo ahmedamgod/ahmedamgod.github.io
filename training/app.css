@@ -299,3 +299,8 @@ details.card summary { cursor: pointer; font-weight: 700; }
 /* feel like an app: no text selection / Google "touch to search" on taps */
 html, body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 input, textarea, select, [contenteditable] { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+
+/* ---------- account requests ---------- */
+.req-card { border: 2px solid var(--orange); }
+.req-item { display: flex; flex-direction: column; gap: 4px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; margin-top: 10px; }
+.req-item .row { margin-top: 6px; }

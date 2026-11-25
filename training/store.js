@@ -51,6 +51,12 @@
     if (!out.code) out.code = randomCode();
     return out;
   }
+  function inactiveMsg(u) {
+    if (!u) return "الحساب ده مش موجود، كلم الأدمن";
+    if (u.status === "pending") return "طلبك لسه مستني موافقة الأدمن";
+    if (u.status === "rejected") return "طلب الحساب ده اترفض، كلم الأدمن";
+    return "الحساب ده متوقف، كلم الأدمن";
+  }
   const byTsDesc = (a, b) => (b.ts || 0) - (a.ts || 0);
 
   /* =========================================================
@@ -90,14 +96,29 @@
         await tick();
         const u = vals(data.users).find((x) => x.username === cleanUsername(username));
         if (!u || u.password !== password) throw new Error("اسم المستخدم أو الباسورد غلط");
-        if (!u.active) throw new Error("الحساب ده متوقف، كلم الماستر");
+        if (!u.active) throw new Error(inactiveMsg(u));
         current = pub(u);
         try { sessionStorage.setItem(SESSION_KEY, u.uid); } catch (e) {}
         emit();
       },
       async logout() { current = null; try { sessionStorage.removeItem(SESSION_KEY); } catch (e) {} emit(); },
 
-      async listUsers() { await tick(); return vals(data.users).map(pub).sort((a, b) => a.name.localeCompare(b.name)); },
+      async listUsers() { await tick(); return vals(data.users).map((u) => Object.assign(pub(u), { status: u.status, jobTitle: u.jobTitle, company: u.company, phone: u.phone, ts: u.ts })).sort((a, b) => a.name.localeCompare(b.name)); },
+      async register({ username, password, name, jobTitle, company, phone }) {
+        await tick();
+        username = cleanUsername(username);
+        if (username === MASTER_USERNAME || vals(data.users).some((u) => u.username === username)) throw new Error("اسم المستخدم ده موجود قبل كده، اختار غيره");
+        if (String(password).length < 6) throw new Error("الباسورد لازم يكون 6 حروف أو أرقام على الأقل");
+        const uid = "u_" + randomCode();
+        data.users[uid] = { uid, username, password, name, jobTitle, company, phone, role: "officer", active: false, status: "pending", ts: Date.now() };
+        save();
+      },
+      async decideRequest(uid, approve, role) {
+        await tick();
+        const u = data.users[uid]; if (!u) return;
+        Object.assign(u, approve ? { active: true, status: "approved", role: role || "officer", approvedBy: current.name } : { active: false, status: "rejected", rejectedBy: current.name });
+        save();
+      },
       async createUser({ username, password, name, role }) {
         await tick();
         username = cleanUsername(username);
@@ -263,7 +284,6 @@
             if (!snap.exists || !snap.data().active) {
               await auth.signOut();
               current = null; emit();
-              alert("الحساب ده مش مفعّل. كلم الماستر.");
               return;
             }
             const u = snap.data();
@@ -276,6 +296,33 @@
       },
       onAuth(cb) { listeners.push(cb); },
       currentUser() { return current; },
+      async register({ username, password, name, jobTitle, company, phone }) {
+        username = cleanUsername(username);
+        if (!/^[a-z0-9._-]{3,30}$/.test(username)) throw new Error("اسم المستخدم بالإنجليزي وأرقام بس (3 حروف على الأقل)");
+        if (username === MASTER_USERNAME) throw new Error("اسم المستخدم ده محجوز");
+        if (String(password).length < 6) throw new Error("الباسورد لازم يكون 6 حروف أو أرقام على الأقل");
+        const m = await db.collection("logins").doc(username).get();
+        if (m.exists) throw new Error("اسم المستخدم ده موجود قبل كده، اختار غيره");
+        // الحساب بيتعمل في تطبيق ثانوي عشان مايدخلش على طول
+        const sec = firebase.apps.find((a) => a.name === "secondary") || firebase.initializeApp(cfg, "secondary");
+        let email = usernameToEmail(username), cred;
+        try { cred = await sec.auth().createUserWithEmailAndPassword(email, password); }
+        catch (e) {
+          const err = authError(e);
+          if (!/موجود قبل كده/.test(err.message)) throw err;
+          email = username + "." + Date.now().toString(36) + "@" + EMAIL_DOMAIN;
+          try { cred = await sec.auth().createUserWithEmailAndPassword(email, password); } catch (e2) { throw authError(e2); }
+        }
+        const sdb = sec.firestore();
+        try {
+          await sdb.collection("users").doc(cred.user.uid).set({ username, name, jobTitle, company, phone, role: "officer", active: false, status: "pending", ts: Date.now() });
+          await sdb.collection("logins").doc(username).set({ email, uid: cred.user.uid });
+        } finally { await sec.auth().signOut(); }
+      },
+      async decideRequest(uid, approve, role) {
+        const patch = approve ? { active: true, status: "approved", role: role || "officer", approvedBy: current.name } : { active: false, status: "rejected", rejectedBy: current.name };
+        await db.collection("users").doc(uid).update(patch);
+      },
       async login(username, password) {
         const u = cleanUsername(username);
         let email = usernameToEmail(u);
@@ -283,8 +330,12 @@
           const m = await db.collection("logins").doc(u).get();
           if (m.exists && m.data().email) email = m.data().email;
         } catch (e) { /* offline or no mapping: use default */ }
-        try { await auth.signInWithEmailAndPassword(email, password); }
+        let cred;
+        try { cred = await auth.signInWithEmailAndPassword(email, password); }
         catch (e) { throw authError(e); }
+        const prof = await db.collection("users").doc(cred.user.uid).get().catch(() => null);
+        const pd = prof && prof.exists ? prof.data() : null;
+        if (u !== MASTER_USERNAME && (!pd || !pd.active)) { await auth.signOut(); throw new Error(inactiveMsg(pd)); }
       },
       async logout() { await auth.signOut(); },
 

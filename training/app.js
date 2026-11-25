@@ -846,9 +846,48 @@
         try { await S.login(user.value, pass.value); } catch (ex) { err.textContent = errMsg(ex); }
         busy(btn, false);
       } }, user, pass, err, btn),
+      h("a", { class: "btn", href: "#/signup", style: "margin-top:6px" }, "مش عندك حساب؟ اطلب حساب جديد"),
       S.mode === "demo" ? h("p", { class: "muted small" }, "وضع التجربة: ادخل بـ admin والباسورد admin") : null
     ));
     setTimeout(() => user.focus(), 50);
+  }
+
+  function viewSignup() {
+    const name = h("input", { class: "input", required: true, placeholder: "اسمك بالكامل", autocomplete: "name" });
+    const username = h("input", { class: "input", required: true, dir: "ltr", autocapitalize: "none", placeholder: "مثال: mohamed.ali", pattern: "[a-zA-Z0-9._\\-]{3,30}", autocomplete: "username" });
+    const job = h("input", { class: "input", required: true, placeholder: "مثال: HSE Officer" });
+    const company = h("input", { class: "input", required: true, placeholder: "اسم الشركة" });
+    const phone = h("input", { class: "input", required: true, inputmode: "tel", dir: "ltr", placeholder: "01xxxxxxxxx", autocomplete: "tel" });
+    const pass = h("input", { class: "input", type: "password", required: true, minlength: 6, dir: "ltr", autocomplete: "new-password" });
+    const pass2 = h("input", { class: "input", type: "password", required: true, minlength: 6, dir: "ltr", autocomplete: "new-password" });
+    const btn = h("button", { class: "btn primary big", type: "submit" }, "ابعت طلب الحساب");
+    const form = h("form", { class: "stack", onsubmit: async (e) => {
+      e.preventDefault();
+      if (pass.value !== pass2.value) { toast("الباسورد مش زي بعضه في الخانتين", "err"); return; }
+      const ph = toWesternDigits(phone.value).replace(/[^\d+]/g, "");
+      if (ph.length < 8) { toast("اكتب رقم تليفون صحيح", "err"); return; }
+      busy(btn, true, "بيبعت...");
+      try {
+        await S.register({ username: username.value, password: pass.value, name: name.value.trim(), jobTitle: job.value.trim(), company: company.value.trim(), phone: ph });
+        setView(h("div", { class: "login" },
+          h("div", { class: "login-logo" }, icon("check")),
+          h("h1", null, "طلبك اتبعت ✓"),
+          h("p", { class: "muted" }, "الأدمن هيراجع طلبك. أول ما يوافق تقدر تدخل باسم المستخدم:"),
+          h("p", { class: "strong", dir: "ltr" }, username.value.trim().toLowerCase()),
+          h("a", { class: "btn primary big", href: "#/" }, "رجوع لصفحة الدخول")));
+      } catch (err) { toast(errMsg(err), "err"); busy(btn, false); }
+    } },
+      field("الاسم بالكامل", name),
+      field("اسم المستخدم (بالإنجليزي، هتدخل بيه)", username),
+      field("الوظيفة", job),
+      field("الشركة", company),
+      field("رقم التليفون", phone),
+      field("الباسورد (6 على الأقل)", pass),
+      field("أكّد الباسورد", pass2),
+      btn,
+      h("a", { class: "btn", href: "#/" }, "عندي حساب، رجوع للدخول"));
+    setView(h("div", { class: "login", style: "margin-top:3vh" }, h("h1", null, "طلب حساب جديد"),
+      h("p", { class: "muted small" }, "املا بياناتك، وحسابك هيشتغل بعد ما الأدمن يوافق عليه."), form));
   }
 
   async function viewHome() {
@@ -861,7 +900,15 @@
       me.role === "master" ? tile("#/admin", "admin", "لوحة الأدمن", "تقارير، أوفيسرز، باسوردات، وإكسل") : null
     );
     const todayBox = h("div", { class: "card" }, h("h3", null, "محاضراتك النهارده"), h("div", { class: "muted" }, "بيحمّل..."));
-    setView(pageTitle("أهلاً " + me.name, "النهارده " + fmtDate(today())), tiles, todayBox, shareCard());
+    const reqBox = h("div");
+    setView(pageTitle("أهلاً " + me.name, "النهارده " + fmtDate(today())), reqBox, tiles, todayBox, shareCard());
+    if (me.role === "master") {
+      S.listUsers().then((us) => {
+        const n = us.filter((u) => u.status === "pending").length;
+        if (n) reqBox.appendChild(h("a", { class: "badge warn", href: "#/admin/officers", style: "display:block;margin-bottom:14px" },
+          h("div", { class: "badge-title" }, "👤 فيه " + n + " طلب حساب جديد مستني موافقتك"), h("div", { class: "badge-sub" }, "دوس هنا عشان تقبل أو ترفض")));
+      }).catch(() => {});
+    }
     try {
       const mine = await myTodaySessions();
       todayBox.innerHTML = ""; todayBox.appendChild(h("h3", null, "محاضراتك النهارده"));
@@ -1227,12 +1274,38 @@
     } }, field("الاسم", name), field("اسم المستخدم", username), field("الباسورد", password), field("الصلاحية", role), btn);
     async function draw() {
       try {
-        const users = await S.listUsers();
+        const all = await S.listUsers();
+        const pending = all.filter((u) => u.status === "pending").sort((a, b) => (a.ts || 0) - (b.ts || 0));
+        const users = all.filter((u) => u.status !== "pending");
+        reqs.innerHTML = "";
+        if (pending.length) {
+          reqs.appendChild(h("h3", null, "طلبات حسابات جديدة (" + pending.length + ")"));
+          pending.forEach((u) => {
+            const role = h("select", { class: "input", style: "max-width:160px" }, h("option", { value: "officer" }, "أوفيسر"), h("option", { value: "master" }, "ماستر"));
+            const decide = async (ok, btn) => {
+              if (!ok && !confirm("ترفض طلب " + u.name + "؟")) return;
+              busy(btn, true);
+              try { await S.decideRequest(u.uid, ok, role.value); toast(ok ? "اتقبل " + u.name + "، يقدر يدخل دلوقتي" : "اترفض الطلب", ok ? "ok" : ""); draw(); }
+              catch (e) { toast(errMsg(e), "err"); busy(btn, false); }
+            };
+            reqs.appendChild(h("div", { class: "req-item" },
+              h("div", { class: "strong" }, u.name),
+              h("div", { class: "muted small" }, [u.jobTitle, u.company].filter(Boolean).join(" · ")),
+              h("div", { class: "muted small", dir: "ltr" }, u.username + (u.phone ? " · " + u.phone : "")),
+              h("div", { class: "muted small" }, "اتبعت " + (u.ts ? fmtDate(U.todayStr(new Date(u.ts))) + " " + fmtTime(u.ts) : "")),
+              h("div", { class: "row wrap" }, role,
+                h("button", { class: "btn small primary", type: "button", onclick: (e) => decide(true, e.currentTarget) }, "✓ قبول"),
+                h("button", { class: "btn small danger", type: "button", onclick: (e) => decide(false, e.currentTarget) }, "✕ رفض"))));
+          });
+        }
+        reqs.hidden = !pending.length;
         list.innerHTML = ""; list.appendChild(h("h3", null, "الحسابات (" + users.length + ")"));
         users.forEach((u) => list.appendChild(h("div", { class: "list-item" + (u.active ? "" : " off") },
           h("div", { class: "grow" },
             h("div", { class: "strong" }, u.name, u.username === "admin" ? h("span", { class: "pill pill-ind", style: "margin-inline-start:6px" }, "صاحب التطبيق") : null),
-            h("div", { class: "muted small", dir: "ltr" }, u.username + " · " + (u.role === "master" ? "master" : "officer"))),
+            h("div", { class: "muted small", dir: "ltr" }, u.username + " · " + (u.role === "master" ? "master" : "officer")),
+            (u.jobTitle || u.company || u.phone) ? h("div", { class: "muted small" }, [u.jobTitle, u.company, u.phone].filter(Boolean).join(" · ")) : null,
+            u.status === "rejected" ? h("div", { class: "hint err" }, "طلب مرفوض") : null),
           u.uid === me.uid ? h("span", { class: "muted small" }, "أنت")
             : (u.username === "admin" && !me.owner) ? h("span", { class: "muted small" }, "🔒")
             : h("div", { class: "row wrap" },
@@ -1246,7 +1319,8 @@
               } }, "حذف") : null))));
       } catch (e) { list.innerHTML = ""; list.appendChild(h("div", { class: "hint err" }, errMsg(e))); }
     }
-    body.append(h("div", { class: "card" }, h("h3", null, "إضافة أوفيسر"), form), list);
+    const reqs = h("div", { class: "card req-card", hidden: true });
+    body.append(reqs, list, h("details", { class: "card" }, h("summary", null, "إضافة حساب بنفسك"), h("div", { style: "margin-top:12px" }, form)));
     draw();
   }
 
@@ -1473,7 +1547,7 @@
     closeModal();
     const me = S.currentUser();
     $("#topbar").hidden = !me; $("#bottomnav").hidden = !me;
-    if (!me) { viewLogin(); return; }
+    if (!me) { if (location.hash.startsWith("#/signup")) viewSignup(); else viewLogin(); return; }
     $("#whoName").textContent = me.name;
     nav();
     const parts = location.hash.replace(/^#\/?/, "").split("/");
@@ -1494,7 +1568,7 @@
   S.init();
 
   /* ---------- update check: shows a banner when a newer version is published ---------- */
-  const APP_VERSION = 13;
+  const APP_VERSION = 14;
   async function hardReload() {
     try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map((r) => r.unregister())); } catch (e) {}
     try { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); } catch (e) {}
