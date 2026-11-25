@@ -336,3 +336,6 @@ select.input { text-overflow: ellipsis; }
 .order-alert.urgent .order-text { color: var(--bad); }
 .pill-urgent { background: var(--bad-bg); color: var(--bad); }
 textarea.input { resize: vertical; min-height: 110px; font: inherit; }
+.ntfy-card { border: 2px dashed var(--orange); }
+.ntfy-card summary { cursor: pointer; font-weight: 800; }
+code.topic { flex: 1; padding: 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); font-size: .95rem; overflow-wrap: anywhere; user-select: all; -webkit-user-select: all; }

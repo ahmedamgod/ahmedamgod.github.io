@@ -1808,6 +1808,44 @@
     } catch (e) { body.innerHTML = ""; body.appendChild(h("div", { class: "hint err" }, errMsg(e))); }
   }
 
+  /* push to phones even when the app is closed, through the free ntfy app.
+     The notification carries no order text: the order stays inside the app. */
+  const NTFY = CFG.notify && CFG.notify.topic ? CFG.notify : null;
+  async function pushOrder(urgent) {
+    if (!NTFY) return;
+    try {
+      await fetch(NTFY.server.replace(/\/$/, "") + "/", {
+        method: "POST",
+        body: JSON.stringify({
+          topic: NTFY.topic,
+          title: urgent ? "🚨 أمر إداري عاجل" : "📢 أمر إداري جديد",
+          message: "افتح التطبيق عشان تقرا الأمر وتأكد الاستلام",
+          priority: urgent ? 5 : 4,
+          tags: [urgent ? "rotating_light" : "loudspeaker"],
+          click: appUrl() + "#/orders"
+        })
+      });
+    } catch (e) { console.warn("ntfy", e); }
+  }
+  function ntfyCard() {
+    if (!NTFY) return null;
+    const host = NTFY.server.replace(/^https?:\/\//, "").replace(/\/$/, "");
+    return h("details", { class: "card ntfy-card" },
+      h("summary", null, "🔔 خلّي الأوامر ترن والتطبيق مقفول (مرة واحدة بس)"),
+      h("div", { class: "stack", style: "margin-top:12px" },
+        h("div", null, "1) نزّل تطبيق ntfy المجاني:"),
+        h("div", { class: "row wrap" },
+          h("a", { class: "btn small", href: "https://play.google.com/store/apps/details?id=io.heckel.ntfy", target: "_blank", rel: "noopener" }, "أندرويد"),
+          h("a", { class: "btn small", href: "https://apps.apple.com/app/ntfy/id1625396347", target: "_blank", rel: "noopener" }, "آيفون")),
+        h("div", null, "2) بعد ما يتسطب، دوس هنا عشان تشترك في قناة الأوامر:"),
+        h("a", { class: "btn primary", href: "ntfy://" + host + "/" + NTFY.topic }, "اشترك في قناة الأوامر"),
+        h("div", { class: "muted small" }, "لو الزرار مافتحش ntfy: افتح ntfy ← دوس + ← اكتب اسم القناة ده بالظبط ← Subscribe:"),
+        h("div", { class: "row" },
+          h("code", { class: "topic", dir: "ltr" }, NTFY.topic),
+          h("button", { class: "btn small", type: "button", onclick: async () => { try { await navigator.clipboard.writeText(NTFY.topic); toast("اتنسخ", "ok"); } catch (e) { toast(NTFY.topic); } } }, "نسخ")),
+        h("div", { class: "muted small" }, "3) في ntfy دوس على القناة ← ⋮ ← Notification settings، واختار صوت مميز. كده أي أمر جديد هيرن حتى والموبايل مقفول.")));
+  }
+
   function viewOrders() {
     const me = S.currentUser();
     const parts = [pageTitle("الأوامر الإدارية")];
@@ -1828,7 +1866,7 @@
         e.preventDefault();
         const t = text.value.trim(); if (!t) return;
         busy(btn, true, "بيبعت...");
-        try { await S.addAnnouncement({ text: t, urgent: urgent.checked, speak: speak.checked, sender: INSTANCE }); text.value = ""; urgent.checked = false; toast("اتبعت للكل ✓", "ok"); }
+        try { await S.addAnnouncement({ text: t, urgent: urgent.checked, speak: speak.checked, sender: INSTANCE }); pushOrder(urgent.checked); text.value = ""; urgent.checked = false; toast("اتبعت للكل ✓", "ok"); }
         catch (err) { toast(errMsg(err), "err"); }
         busy(btn, false);
       } }, text,
@@ -1836,6 +1874,7 @@
         h("label", { class: "check" }, speak, "🔊 الموبايل يقرا الرسالة بصوت عالي"),
         btn)));
     }
+    parts.push(ntfyCard());
     ordersListEl = h("div", { class: "stack" });
     parts.push(ordersListEl);
     setView(...parts);
@@ -1883,7 +1922,7 @@
   S.init();
 
   /* ---------- update check: shows a banner when a newer version is published ---------- */
-  const APP_VERSION = 21;
+  const APP_VERSION = 22;
   async function hardReload() {
     try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map((r) => r.unregister())); } catch (e) {}
     try { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); } catch (e) {}

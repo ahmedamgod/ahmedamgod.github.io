@@ -26,6 +26,9 @@ window.HSE_CONFIG = {
     appId: "1:867206873930:web:f3aa336152e53d182f37b3"
   },
 
+  // إشعارات الأوامر الإدارية والتطبيق مقفول (تطبيق ntfy المجاني)
+  notify: { server: "https://ntfy.sh", topic: "hse-orders-0klx5h8rsjn7rw" },
+
   // مدة صلاحية الاندكشن بالأيام (0 = مالوش انتهاء)
   inductionValidDays: 0,
 
