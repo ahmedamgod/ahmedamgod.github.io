@@ -1820,7 +1820,7 @@
           topic: NTFY.topic,
           title: urgent ? "🚨 أمر إداري عاجل" : "📢 أمر إداري جديد",
           message: "افتح التطبيق عشان تقرا الأمر وتأكد الاستلام",
-          priority: urgent ? 5 : 4,
+          priority: 5,
           tags: [urgent ? "rotating_light" : "loudspeaker"],
           click: appUrl() + "#/orders"
         })
@@ -1843,7 +1843,8 @@
         h("div", { class: "row" },
           h("code", { class: "topic", dir: "ltr" }, NTFY.topic),
           h("button", { class: "btn small", type: "button", onclick: async () => { try { await navigator.clipboard.writeText(NTFY.topic); toast("اتنسخ", "ok"); } catch (e) { toast(NTFY.topic); } } }, "نسخ")),
-        h("div", { class: "muted small" }, "3) في ntfy دوس على القناة ← ⋮ ← Notification settings، واختار صوت مميز. كده أي أمر جديد هيرن حتى والموبايل مقفول.")));
+        h("div", { class: "muted small" }, "3) صوت عالي ومميز: إعدادات الموبايل ← Apps ← ntfy ← Notifications ← Max priority ← Sound ← اختار نغمة منبه عالية، وفعّل Override Do Not Disturb."),
+        h("div", { class: "muted small" }, "4) عشان يفضل يرن لحد ما تفتحه: ntfy ← ⋮ ← Settings ← فعّل Keep alerting for highest priority.")));
   }
 
   function viewOrders() {
@@ -1922,7 +1923,7 @@
   S.init();
 
   /* ---------- update check: shows a banner when a newer version is published ---------- */
-  const APP_VERSION = 22;
+  const APP_VERSION = 23;
   async function hardReload() {
     try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map((r) => r.unregister())); } catch (e) {}
     try { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); } catch (e) {}
