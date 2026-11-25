@@ -857,6 +857,7 @@
       tile("#/lookup", "search", "كشف على عامل", "أخد الاندكشن ومحاضرة النهارده ولا لأ؟"),
       tile("#/talk", "talk", "محاضرة اليوم", "ابدأ محاضرة وسجّل الحاضرين"),
       me.role === "master" ? tile("#/register", "add", "عامل جديد (اندكشن)", "تسجيل عامل وطباعة الكارت") : null,
+      me.role === "master" ? tile("#/admin/import", "admin", "استيراد إكسل", "ارفع شيت العمال اللي أخدوا الاندكشن") : null,
       me.role === "master" ? tile("#/admin", "admin", "لوحة الأدمن", "تقارير، أوفيسرز، باسوردات، وإكسل") : null
     );
     const todayBox = h("div", { class: "card" }, h("h3", null, "محاضراتك النهارده"), h("div", { class: "muted" }, "بيحمّل..."));
@@ -1431,7 +1432,8 @@
     box.innerHTML = "";
     box.append(
       h("div", { class: "stack" }, q, h("div", { class: "row wrap" }, company, h("label", { class: "check small" }, onlyMissing, "اللي ماخدوش محاضرة النهارده بس"))),
-      h("div", { class: "row wrap between" }, countEl, h("div", { class: "row" },
+      h("div", { class: "row wrap between" }, countEl, h("div", { class: "row wrap" },
+        h("a", { class: "btn small primary", href: "#/admin/import" }, "⬆ استيراد من إكسل"),
         h("button", { class: "btn small", type: "button", onclick: () => exportXlsx("workers-" + today() + ".xlsx", [["العمال", filtered.map((w) => ({
           "الاسم": w.name, "رقم الهوية": w.nid, "الشركة": w.company || "", "الوظيفة": w.job || "", "التليفون": w.phone || "",
           "العنوان": w.address || "", "تاريخ الميلاد": w.birthDate || "", "النوع": w.gender || "", "المحافظة": w.governorate || "",
