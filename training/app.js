@@ -108,6 +108,20 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => (t.className = "toast"), 2600);
   }
+  /** snackbar with an undo button */
+  let undoTimer;
+  function undoBar(msg, onUndo) {
+    let bar = document.getElementById("undoBar");
+    if (bar) bar.remove();
+    clearTimeout(undoTimer);
+    bar = h("div", { id: "undoBar", class: "undo-bar", role: "status" }, h("span", { class: "grow" }, msg),
+      h("button", { type: "button", onclick: async () => {
+        bar.remove(); clearTimeout(undoTimer);
+        try { await onUndo(); toast("اترجع ✓", "ok"); } catch (e) { toast(errMsg(e), "err"); }
+      } }, "تراجع"));
+    document.body.appendChild(bar);
+    undoTimer = setTimeout(() => bar.remove(), 6000);
+  }
   function beep(ok = true) {
     try {
       if (navigator.vibrate) navigator.vibrate(ok ? 80 : [60, 60, 60]);
@@ -1010,8 +1024,13 @@
         h("span", { class: "num" }, String(recs.length - i)),
         h("div", { class: "grow" }, h("div", { class: "strong" }, r.workerName), h("div", { class: "muted small" }, [r.company, displayId(r.nid), fmtTime(r.ts)].filter(Boolean).join(" · "))),
         canEdit ? h("button", { class: "icon-btn", type: "button", title: "شيل", "aria-label": "شيل " + r.workerName, onclick: async () => {
-          if (!confirm("تشيل " + r.workerName + " من المحاضرة دي؟")) return;
-          try { await S.removeAttendance(r.id); refresh(); } catch (e) { toast(errMsg(e), "err"); }
+          try {
+            await S.removeAttendance(r.id); refresh();
+            undoBar("اتشال " + r.workerName, async () => {
+              await S.addAttendance(s, { nid: r.nid, name: r.workerName, company: r.company });
+              refresh();
+            });
+          } catch (e) { toast(errMsg(e), "err"); }
         } }, "✕") : null
       )));
     }
@@ -1568,7 +1587,7 @@
   S.init();
 
   /* ---------- update check: shows a banner when a newer version is published ---------- */
-  const APP_VERSION = 14;
+  const APP_VERSION = 15;
   async function hardReload() {
     try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map((r) => r.unregister())); } catch (e) {}
     try { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); } catch (e) {}
