@@ -17,7 +17,14 @@ window.HSE_CONFIG = {
   appName: "HSE Training Tracker",
   siteName: "AMEA AFRE – Solar PV & BESS",
 
-  firebase: null,
+  firebase: {
+    apiKey: "AIzaSyCSC6ff47GCIGu54WoBU34_oqhGsPtfrjw",
+    authDomain: "hse-training-51df2.firebaseapp.com",
+    projectId: "hse-training-51df2",
+    storageBucket: "hse-training-51df2.firebasestorage.app",
+    messagingSenderId: "867206873930",
+    appId: "1:867206873930:web:f3aa336152e53d182f37b3"
+  },
 
   // مدة صلاحية الاندكشن بالأيام (0 = مالوش انتهاء)
   inductionValidDays: 0,
