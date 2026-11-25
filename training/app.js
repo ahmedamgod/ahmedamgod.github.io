@@ -971,11 +971,18 @@
   function tile(href, ic, title, sub) {
     return h("a", { class: "tile", href }, h("div", { class: "tile-ico" }, icon(ic)), h("div", null, h("div", { class: "tile-title" }, title), h("div", { class: "tile-sub" }, sub)));
   }
-  function sessionRow(s) {
-    return h("a", { class: "list-item", href: "#/talk/" + s.id },
-      h("span", { class: "pill " + (s.type === "induction" ? "pill-ind" : "pill-daily") }, TYPE_LABEL[s.type]),
-      h("div", { class: "grow" }, h("div", { class: "strong" }, s.topic), h("div", { class: "muted small" }, fmtDate(s.date) + " " + fmtTime(s.ts) + " · " + s.officerName + (s.location ? " · " + s.location : ""))),
-      h("span", { class: "count" }, String(s.count || 0)));
+  function sessionRow(s, opt = {}) {
+    const n = opt.count != null ? opt.count : (s.count || 0);
+    const kids = [
+      opt.selecting ? h("span", { class: "tick" + (opt.selected ? " on" : "") }, opt.selected ? "✓" : "") : null,
+      h("div", { class: "grow" },
+        h("span", { class: "pill " + (s.type === "induction" ? "pill-ind" : "pill-daily") }, TYPE_LABEL[s.type]),
+        h("div", { class: "strong" }, s.topic),
+        h("div", { class: "muted small" }, fmtDate(s.date) + " " + fmtTime(s.ts)),
+        h("div", { class: "muted small" }, [s.officerName, s.location].filter(Boolean).join(" · "))),
+      h("span", { class: "count" }, String(n))];
+    if (opt.selecting) return h("button", { type: "button", class: "list-item" + (opt.selected ? " selected" : ""), onclick: opt.onToggle }, kids);
+    return h("a", { class: "list-item", href: "#/talk/" + s.id }, kids);
   }
 
   function viewLookup() {
@@ -1024,6 +1031,7 @@
     async function refresh() {
       try { recs = await S.listAttendanceBySession(s.id); } catch (e) { toast(errMsg(e), "err"); }
       countEl.textContent = String(recs.length);
+      if ((s.count || 0) !== recs.length && S.setSessionCount) { s.count = recs.length; S.setSessionCount(s.id, recs.length).catch(() => {}); }
       list.innerHTML = "";
       if (!recs.length) list.appendChild(h("div", { class: "empty" }, "لسه محدش اتسجل"));
       recs.forEach((r, i) => list.appendChild(h("div", { class: "list-item" },
@@ -1248,13 +1256,43 @@
         const inds = att.filter((a) => a.type === "induction").length;
         const officers = {};
         sessions.forEach((s) => { officers[s.officerName] = (officers[s.officerName] || 0) + 1; });
+        const counts = {};
+        att.forEach((a) => { counts[a.sessionId] = (counts[a.sessionId] || 0) + 1; });
+        let selecting = false; const selected = new Set();
+        const listEl = h("div", { class: "list" });
+        const selCount = h("span", { class: "strong" });
+        const selBar = h("div", { class: "sel-bar", hidden: true },
+          h("div", { class: "row between" }, selCount, h("button", { class: "btn small", type: "button", onclick: () => setSel(false) }, "إلغاء")),
+          h("div", { class: "action-grid" },
+            h("button", { class: "btn small", type: "button", onclick: () => {
+              const all = sessions.every((x) => selected.has(x.id));
+              sessions.forEach((x) => (all ? selected.delete(x.id) : selected.add(x.id))); drawList();
+            } }, "تحديد الكل / إلغاء"),
+            h("button", { class: "btn small danger", type: "button", onclick: async (e) => {
+              const ids = Array.from(selected);
+              if (!ids.length) { toast("محددتش ولا محاضرة", "err"); return; }
+              const n = ids.reduce((t, id) => t + (counts[id] || 0), 0);
+              if (!confirm("هتمسح " + ids.length + " محاضرة ومعاها " + n + " تسجيل حضور. متأكد؟")) return;
+              const btn = e.currentTarget; busy(btn, true, "بيمسح...");
+              try { await S.deleteSessions(ids); toast("اتمسح " + ids.length + " محاضرة", "ok"); load(); }
+              catch (err) { toast(errMsg(err), "err"); busy(btn, false); }
+            } }, "🗑 حذف المحددين")));
+        const selBtn = h("button", { class: "btn small", type: "button", onclick: () => setSel(true) }, "☑ تحديد");
+        function setSel(on) { selecting = on; selected.clear(); selBar.hidden = !on; selBtn.hidden = on; drawList(); }
+        function drawList() {
+          selCount.textContent = "محدد: " + selected.size;
+          listEl.innerHTML = "";
+          if (!sessions.length) { listEl.appendChild(h("div", { class: "empty" }, "مفيش محاضرات في الفترة دي")); return; }
+          sessions.forEach((x) => listEl.appendChild(sessionRow(x, { count: counts[x.id] || 0, selecting, selected: selected.has(x.id),
+            onToggle: () => { if (selected.has(x.id)) selected.delete(x.id); else selected.add(x.id); drawList(); } })));
+        }
+        drawList();
         out.append(
           h("div", { class: "stats" },
             stat(sessions.length, "محاضرة"), stat(att.length, "حضور"), stat(uniq, "عامل مختلف"), stat(inds, "اندكشن")),
           h("div", { class: "row wrap" },
             h("button", { class: "btn", type: "button", onclick: exportReport }, "تصدير إكسل")),
-          h("div", { class: "card" }, h("h3", null, "المحاضرات"),
-            sessions.length ? sessions.map((s) => sessionRow(s)) : h("div", { class: "empty" }, "مفيش محاضرات في الفترة دي")),
+          h("div", { class: "card" }, h("div", { class: "row between" }, h("h3", null, "المحاضرات"), sessions.length ? selBtn : null), selBar, listEl),
           Object.keys(officers).length ? h("div", { class: "card" }, h("h3", null, "المحاضرات لكل أوفيسر"),
             Object.entries(officers).sort((a, b) => b[1] - a[1]).map(([n, c]) => h("div", { class: "list-item" }, h("div", { class: "grow" }, n), h("span", { class: "count" }, String(c))))) : null
         );
@@ -1270,7 +1308,7 @@
         }))],
         ["المحاضرات", data.sessions.slice().sort((a, b) => a.ts - b.ts).map((s) => ({
           "التاريخ": s.date, "الوقت": fmtTime(s.ts), "النوع": TYPE_LABEL[s.type], "الموضوع": s.topic, "المكان": s.location || "",
-          "الأوفيسر": s.officerName, "عدد الحضور": s.count || 0
+          "الأوفيسر": s.officerName, "عدد الحضور": data.att.filter((a) => a.sessionId === s.id).length
         }))]
       ]);
     }
@@ -1646,7 +1684,7 @@
   S.init();
 
   /* ---------- update check: shows a banner when a newer version is published ---------- */
-  const APP_VERSION = 17;
+  const APP_VERSION = 18;
   async function hardReload() {
     try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map((r) => r.unregister())); } catch (e) {}
     try { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); } catch (e) {}

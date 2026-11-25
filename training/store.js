@@ -204,6 +204,15 @@
       },
       async getSession(id) { await tick(); return data.sessions[id] || null; },
       async listSessionsByDate(date) { await tick(); return vals(data.sessions).filter((s) => s.date === date).sort(byTsDesc); },
+      async setSessionCount(id, n) { if (data.sessions[id]) { data.sessions[id].count = n; save(); } },
+      async deleteSessions(ids) {
+        await tick();
+        if (current.role !== "master") throw new Error("مسح المحاضرات من الأدمن بس");
+        const set = new Set(ids);
+        Object.keys(data.attendance).forEach((k) => { if (set.has(data.attendance[k].sessionId)) delete data.attendance[k]; });
+        ids.forEach((id) => delete data.sessions[id]);
+        save();
+      },
       async listSessionsRange(from, to) { await tick(); return vals(data.sessions).filter((s) => s.date >= from && s.date <= to).sort(byTsDesc); },
 
       async addAttendance(session, worker) {
@@ -499,6 +508,19 @@
         await ref.set(out); return out;
       },
       async getSession(id) { const s = await db.collection("sessions").doc(id).get(); return s.exists ? s.data() : null; },
+      async setSessionCount(id, n) { await db.collection("sessions").doc(id).update({ count: n }); },
+      /* بيمسح المحاضرات ومعاها تسجيلات الحضور بتاعتها */
+      async deleteSessions(ids) {
+        if (current.role !== "master") throw new Error("مسح المحاضرات من الأدمن بس");
+        let batch = db.batch(), ops = 0;
+        const flush = async () => { if (ops) { await batch.commit(); batch = db.batch(); ops = 0; } };
+        for (const id of ids) {
+          const att = await db.collection("attendance").where("sessionId", "==", id).get();
+          for (const d of att.docs) { batch.delete(d.ref); if (++ops >= 400) await flush(); }
+          batch.delete(db.collection("sessions").doc(id)); if (++ops >= 400) await flush();
+        }
+        await flush();
+      },
       async listSessionsByDate(date) {
         const s = await db.collection("sessions").where("date", "==", date).get();
         return docs(s).sort(byTsDesc);
