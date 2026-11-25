@@ -293,3 +293,5 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 6px 0; }
 .import-map { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 @media (max-width: 420px) { .import-map { grid-template-columns: 1fr; } }
 details.card summary { cursor: pointer; font-weight: 700; }
+
+.update-bar { position: fixed; inset-inline: 12px; top: calc(70px + env(safe-area-inset-top)); z-index: 70; padding: 12px; border-radius: 12px; border: 0; background: var(--ok); color: #fff; font-weight: 800; box-shadow: 0 6px 20px rgba(0,0,0,.3); cursor: pointer; }

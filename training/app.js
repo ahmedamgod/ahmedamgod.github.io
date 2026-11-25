@@ -1152,7 +1152,8 @@
       [["reports", "التقارير"], ["officers", "الأوفيسرز"], ["workers", "العمال"], ["import", "استيراد إكسل"]].map(([k, l]) =>
         h("a", { class: "seg-btn" + (k === tab ? " on" : ""), href: "#/admin/" + k }, l)));
     const body = h("div");
-    setView(pageTitle("لوحة الأدمن"), tabs, body);
+    setView(pageTitle("لوحة الأدمن", "نسخة التطبيق " + APP_VERSION), tabs, body,
+      h("button", { class: "btn small", type: "button", onclick: hardReload, style: "margin-top:16px" }, "↻ تحديث التطبيق لآخر نسخة"));
     if (tab === "reports") adminReports(body);
     if (tab === "officers") adminOfficers(body);
     if (tab === "workers") adminWorkers(body);
@@ -1483,6 +1484,27 @@
   $("#demoBanner").hidden = S.mode !== "demo";
   S.onAuth(() => route());
   S.init();
+
+  /* ---------- update check: shows a banner when a newer version is published ---------- */
+  const APP_VERSION = 11;
+  async function hardReload() {
+    try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map((r) => r.unregister())); } catch (e) {}
+    try { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); } catch (e) {}
+    location.replace(location.pathname + "?r=" + Date.now() + location.hash);
+  }
+  async function checkUpdate() {
+    try {
+      const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
+      const j = await r.json();
+      if (j.v > APP_VERSION && !document.getElementById("updBar")) {
+        document.body.appendChild(h("button", { id: "updBar", class: "update-bar", type: "button", onclick: hardReload }, "⬆ فيه تحديث جديد للتطبيق، دوس هنا"));
+      }
+    } catch (e) {}
+  }
+  window.HSE_hardReload = hardReload;
+  checkUpdate();
+  setInterval(checkUpdate, 5 * 60 * 1000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) checkUpdate(); });
 
   if ("serviceWorker" in navigator && location.protocol === "https:") {
     navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then((r) => r.update()).catch(() => {});
