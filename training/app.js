@@ -166,7 +166,7 @@
     async function start() {
       stop();
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
       } catch (e) {
         throw new Error("مش قادر أفتح الكاميرا. اسمح للمتصفح باستخدام الكاميرا.");
       }

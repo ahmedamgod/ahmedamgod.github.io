@@ -145,7 +145,10 @@
     }
     const runsAt = (fy) => { const y = Math.min(c.h - 1, Math.max(0, Math.round(fy * (c.h - 1)))); let r = 0, prev = 0; for (let x = 0; x < c.w; x++) { const v = bin[(c.y0 + y) * w + c.x0 + x]; if (v && !prev) r++; prev = v; } return r; };
     const widthAt = (fy) => { const y = Math.min(c.h - 1, Math.max(0, Math.round(fy * (c.h - 1)))); let a = -1, b = -1; for (let x = 0; x < c.w; x++) if (bin[(c.y0 + y) * w + c.x0 + x]) { if (a < 0) a = x; b = x; } return a < 0 ? 0 : (b - a + 1) / c.w; };
-    const maxRuns = (a, b) => { let r = 0; for (let f = a; f <= b; f += 0.04) r = Math.max(r, runsAt(f)); return r; };
+    const maxRuns = (a, b) => { let r = 0; for (let f = a; f <= b; f += 0.03) r = Math.max(r, runsAt(f)); return r; };
+    // teeth on top (٢ / ٣) can blur together; also count them on the stricter mask
+    const runsStrict = (fy) => { if (!STRICT) return 0; const y = Math.min(c.h - 1, Math.max(0, Math.round(fy * (c.h - 1)))); let r = 0, prev = 0; for (let x = 0; x < c.w; x++) { const v = STRICT[(c.y0 + y) * w + c.x0 + x]; if (v && !prev) r++; prev = v; } return r; };
+    let topStrict = 0; for (let f = 0.04; f <= 0.3; f += 0.03) topStrict = Math.max(topStrict, runsStrict(f));
     // vertical stem: a narrow column band covering most rows
     const band = Math.max(1, Math.round(c.w * 0.18));
     let stem = 0, stemX = 0;
@@ -158,20 +161,31 @@
     const th = Math.max(1, Math.round(c.h * 0.4));
     for (let y = 0; y < th; y++) for (let x = 0; x < c.w; x++) td += bin[(c.y0 + y) * w + c.x0 + x];
     td /= th * c.w;
+    // depth of the empty notch rising from the bottom in the middle columns (big for ٨)
+    let notch = 0, nc = 0;
+    for (let x = Math.floor(c.w * 0.4); x <= Math.ceil(c.w * 0.6) && x < c.w; x++) {
+      let d = 0; for (let y = c.h - 1; y >= 0 && !bin[(c.y0 + y) * w + c.x0 + x]; y--) d++;
+      notch += d / c.h; nc++;
+    }
+    notch = nc ? notch / nc : 0;
+    let tx = 0, tn = 0;
+    for (let y = 0; y < Math.max(1, Math.round(c.h * 0.2)); y++) for (let x = 0; x < c.w; x++) if (bin[(c.y0 + y) * w + c.x0 + x]) { tx += x; tn++; }
     let bx = 0, bn = 0;
     for (let y = Math.floor(c.h * 0.85); y < c.h; y++) for (let x = 0; x < c.w; x++) if (bin[(c.y0 + y) * w + c.x0 + x]) { bx += x; bn++; }
-    return { holes, ar: c.h / c.w, top: maxRuns(0.04, 0.3), mid: maxRuns(0.35, 0.65), mid2: maxRuns(0.45, 0.68), bot: maxRuns(0.75, 0.96), wTop: widthAt(0.12), wBot: widthAt(0.88), stem, stemX, botX: bn ? bx / bn / c.w : 0.5, td };
+    return { holes, ar: c.h / c.w, top: Math.max(maxRuns(0.04, 0.3), Math.min(3, topStrict)), mid: maxRuns(0.35, 0.65), mid2: maxRuns(0.45, 0.68), bot: maxRuns(0.75, 0.96), wTop: widthAt(0.12), wBot: widthAt(0.88), stem, stemX, botX: bn ? bx / bn / c.w : 0.5, topX: tn ? tx / tn / c.w : 0.5, td, notch };
   }
 
   /** rule based digit recognition; returns digit or -1 when unsure */
   function rules(f) {
     if (f.holes.length) return f.holes[0].cy < 0.4 ? 9 : 5;
     if (f.ar > 2.1) return 1;
-    if (f.wBot > f.wTop * 1.3) return f.mid2 >= 2 ? 8 : 4;   // Λ-like: ٨ (two legs) or ٤
+    if (f.wBot > f.wTop * 1.3) return (f.notch > 0.15 || f.mid2 >= 2) ? 8 : 4;   // Λ-like: ٨ (open between legs) or ٤
     if (f.wTop > f.wBot * 1.3) {                               // V-like / hooked
       if (f.top >= 3) return 3;
       if (f.mid2 >= 2) return 7;
-      return f.botX < 0.5 ? 2 : 6;                             // stem on the left = ٢, right = ٦
+      if (f.top === 2 && f.botX < 0.72) return 2;              // ٢: stem + one tooth on top
+      if (f.top === 1 && f.botX > 0.55) return 6;              // ٦: one bar on top, stem on the right
+      return f.botX < 0.5 ? 2 : 6;
     }
     return -1;
   }
@@ -271,7 +285,7 @@
           return classify(bin, w, q);
         });
         const s = ds.map((x) => x.d).join("");
-        if (DEBUG) DEBUG.push({ s, feats: run.map((q) => Object.assign({ w: q.w, h: q.h }, features(bin, w, q))) });
+        if (DEBUG) DEBUG.push({ s, feats: run.map((q) => { const f = features(bin, w, q); return { w: q.w, h: q.h, top: f.top, mid2: f.mid2, wT: +f.wTop.toFixed(2), wB: +f.wBot.toFixed(2), topX: +f.topX.toFixed(2), botX: +f.botX.toFixed(2), holes: f.holes.length, ar: +f.ar.toFixed(2), notch: +f.notch.toFixed(2) }; }) });
         for (let i = 0; i + 14 <= s.length; i++) {
           const sub = s.slice(i, i + 14);
           if (validNid(sub, check)) {
