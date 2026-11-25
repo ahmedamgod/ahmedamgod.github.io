@@ -40,8 +40,8 @@
     crypto.getRandomValues(arr);
     return Array.from(arr, (n) => abc[n % abc.length]).join("");
   }
-  const usernameToEmail = (u) => String(u).trim().toLowerCase() + "@" + EMAIL_DOMAIN;
-  const cleanUsername = (u) => String(u || "").trim().toLowerCase();
+  const cleanUsername = (u) => String(u || "").trim().toLowerCase().split("@")[0];
+  const usernameToEmail = (u) => cleanUsername(u) + "@" + EMAIL_DOMAIN;
 
   function prepareWorker(w) {
     const out = Object.assign({}, w);
@@ -184,6 +184,7 @@
         return new Error("اسم المستخدم أو الباسورد غلط");
       if (c.includes("too-many-requests")) return new Error("محاولات كتير، استنى شوية وجرب تاني");
       if (c.includes("network")) return new Error("مفيش إنترنت");
+      if (c.includes("invalid-email")) return new Error("اسم المستخدم فيه حروف غلط، استخدم حروف إنجليزي وأرقام بس");
       if (c.includes("email-already-in-use")) return new Error("اسم المستخدم ده موجود قبل كده");
       if (c.includes("weak-password")) return new Error("الباسورد لازم يكون 6 حروف أو أرقام على الأقل");
       if (c.includes("permission-denied")) return new Error("مالكش صلاحية تعمل كده");
