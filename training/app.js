@@ -1657,10 +1657,9 @@
   function setSeen(ts) { try { if (ts > getSeen()) localStorage.setItem(seenKey(), String(ts)); } catch (e) {} updateBell(); }
   function getAcked() { try { return new Set(JSON.parse(localStorage.getItem(ackKey()) || "[]")); } catch (e) { return new Set(); } }
   function markAcked(id) { const s = getAcked(); s.add(id); try { localStorage.setItem(ackKey(), JSON.stringify(Array.from(s).slice(-200))); } catch (e) {} }
-  const sentKey = "hse_orders_sent_here";
-  function sentHere() { try { return new Set(JSON.parse(localStorage.getItem(sentKey) || "[]")); } catch (e) { return new Set(); } }
-  function markSentHere(text, ts) { const s = sentHere(); s.add(text + "|" + Math.floor(ts / 60000)); try { localStorage.setItem(sentKey, JSON.stringify(Array.from(s).slice(-50))); } catch (e) {} }
-  const fromThisDevice = (o) => { const s = sentHere(); const m = Math.floor(o.ts / 60000); return s.has(o.text + "|" + m) || s.has(o.text + "|" + (m - 1)) || s.has(o.text + "|" + (m + 1)); };
+  // every open copy of the app gets its own id, so an order rings everywhere except the screen it was sent from
+  const INSTANCE = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now());
+  const fromThisDevice = (o) => o.sender === INSTANCE;
   const unread = () => { const seen = getSeen(); return orders.filter((o) => o.ts > seen && !fromThisDevice(o)); };
   function updateBell() {
     const n = unread().length, el = $("#bellN");
@@ -1829,7 +1828,7 @@
         e.preventDefault();
         const t = text.value.trim(); if (!t) return;
         busy(btn, true, "بيبعت...");
-        try { markSentHere(t, Date.now()); await S.addAnnouncement({ text: t, urgent: urgent.checked, speak: speak.checked }); text.value = ""; urgent.checked = false; toast("اتبعت للكل ✓", "ok"); }
+        try { await S.addAnnouncement({ text: t, urgent: urgent.checked, speak: speak.checked, sender: INSTANCE }); text.value = ""; urgent.checked = false; toast("اتبعت للكل ✓", "ok"); }
         catch (err) { toast(errMsg(err), "err"); }
         busy(btn, false);
       } }, text,
@@ -1884,7 +1883,7 @@
   S.init();
 
   /* ---------- update check: shows a banner when a newer version is published ---------- */
-  const APP_VERSION = 20;
+  const APP_VERSION = 21;
   async function hardReload() {
     try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map((r) => r.unregister())); } catch (e) {}
     try { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); } catch (e) {}

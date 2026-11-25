@@ -213,11 +213,11 @@
         this._annCb = push; setTimeout(push, 0);
         return () => { this._annCb = null; };
       },
-      async addAnnouncement({ text, urgent, speak }) {
+      async addAnnouncement({ text, urgent, speak, sender }) {
         await tick();
         if (current.role !== "master") throw new Error("الأوامر الإدارية من الماستر بس");
         const id = "a_" + Date.now().toString(36) + randomCode().slice(0, 4);
-        data.announcements[id] = { id, text, urgent: !!urgent, speak: !!speak, createdBy: current.uid, createdByName: current.name, ts: Date.now(), acks: {} };
+        data.announcements[id] = { id, text, urgent: !!urgent, speak: !!speak, sender: sender || "", createdBy: current.uid, createdByName: current.name, ts: Date.now(), acks: {} };
         save(); if (this._annCb) this._annCb();
       },
       async deleteAnnouncement(id) { await tick(); delete data.announcements[id]; save(); if (this._annCb) this._annCb(); },
@@ -540,10 +540,10 @@
         return db.collection("announcements").orderBy("ts", "desc").limit(30)
           .onSnapshot((snap) => cb(docs(snap)), (e) => console.warn("announcements", e));
       },
-      async addAnnouncement({ text, urgent, speak }) {
+      async addAnnouncement({ text, urgent, speak, sender }) {
         if (current.role !== "master") throw new Error("الأوامر الإدارية من الماستر بس");
         const ref = db.collection("announcements").doc();
-        try { await ref.set({ id: ref.id, text, urgent: !!urgent, speak: !!speak, createdBy: current.uid, createdByName: current.name, ts: Date.now() }); }
+        try { await ref.set({ id: ref.id, text, urgent: !!urgent, speak: !!speak, sender: sender || "", createdBy: current.uid, createdByName: current.name, ts: Date.now() }); }
         catch (e) { throw authError(e); }
       },
       async deleteAnnouncement(id) {
