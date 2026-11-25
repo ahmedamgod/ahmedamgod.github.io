@@ -15,7 +15,7 @@
  */
 window.HSE_CONFIG = {
   appName: "HSE Training Tracker",
-  siteName: "AMEA AFRE – Solar PV & BESS",
+  siteName: "",
 
   firebase: {
     apiKey: "AIzaSyCSC6ff47GCIGu54WoBU34_oqhGsPtfrjw",

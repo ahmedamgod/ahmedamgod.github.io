@@ -9,7 +9,11 @@
     jsqr: "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js",
     face: "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js",
     faceModels: "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model/",
-    xlsx: "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"
+    xlsx: "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
+    ocr: "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js",
+    ocrWorker: "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js",
+    ocrCore: "https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1",
+    ocrLang: "https://cdn.jsdelivr.net/npm/@tesseract.js-data/ara@1.0.0/4.0.0_best_int"
   };
 
   const TOPICS = [
@@ -314,7 +318,7 @@
     const status = h("div", { class: "scan-status" }, "بيفتح الكاميرا...");
     const el = h("div", { class: "scanner" }, cam.el, status);
     let running = false, pausedUntil = 0, timer = null, lastOcr = 0;
-    let lastVal = "", lastValT = 0;
+    let lastVal = "", lastValT = 0, lastCrop = null;
     const fresh = (v) => { const now = Date.now(); if (v === lastVal && now - lastValT < 10000) { lastValT = now; return false; } lastVal = v; lastValT = now; return true; };
     const hist = [];
     const small = document.createElement("canvas");
@@ -345,12 +349,14 @@
           }
           if (opts.card && running && Date.now() > pausedUntil && Date.now() - lastOcr > 500 && window.IDOCR) {
             lastOcr = Date.now();
-            const nid = IDOCR.read(cropGuide(v), { check: nidCheck });
+            const crop = cropGuide(v);
+            const nid = IDOCR.read(crop, { check: nidCheck });
+            if (nid) lastCrop = crop;
             if (nid) {
               hist.push(nid); if (hist.length > 6) hist.shift();
               if (hist.filter((x) => x === nid).length >= 2 && fresh(nid)) {
                 hist.length = 0; pausedUntil = Date.now() + 3000;
-                beep(true); setStatus("✓ الرقم القومي: " + nid, "ok"); opts.onNid(nid);
+                beep(true); setStatus("✓ الرقم القومي: " + nid, "ok"); opts.onNid(nid, lastCrop);
               } else setStatus("لقيت رقم، ثبّت الكاميرا ثانية...", "");
             }
           }
@@ -373,10 +379,74 @@
     };
   }
 
+  /* ---------- name & address from the card (Tesseract reads Arabic letters well) ---------- */
+  let ocrWorkerP = null;
+  function ocrWorker() {
+    if (!ocrWorkerP) {
+      ocrWorkerP = (async () => {
+        await loadScript(LIBS.ocr);
+        const w = await Tesseract.createWorker("ara", 1, { workerPath: LIBS.ocrWorker, corePath: LIBS.ocrCore, langPath: LIBS.ocrLang });
+        await w.setParameters({ tessedit_pageseg_mode: "11" });
+        return w;
+      })().catch((e) => { ocrWorkerP = null; throw e; });
+    }
+    return ocrWorkerP;
+  }
+  const COMMON_NAMES = ("محمد احمد محمود مصطفى علي حسن حسين ابراهيم عبدالله عبدالرحمن عبدالعزيز عبدالرحيم عبدالمقصود عبدالحميد عبدالفتاح عبدالناصر عبدالباسط عمر خالد يوسف سيد السيد " +
+    "طه ياسر ياسين اسامه اسماعيل ايمن امجد اشرف عادل عاطف عصام عماد عمرو فتحي جمال حمدي حامد حماده رمضان سامي سعيد سعد شريف صابر صلاح طارق عزت فاروق فارس فوزي كريم كمال " +
+    "مجدي مدحت مراد منصور ناصر نبيل هاني هشام وليد وائل رجب شعبان عرفه بكري جابر حسانين عثمان قاسم نصر محمدين زكريا مرسي هريدي عوض ابوبكر بلال حمزه زياد مازن").split(" ");
+  function lev(a, b) {
+    const m = a.length, n = b.length; const d = Array.from({ length: m + 1 }, (_, i) => [i]);
+    for (let j = 1; j <= n; j++) d[0][j] = j;
+    for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    return d[m][n];
+  }
+  const normA = (x) => x.replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي");
+  function fixName(name) {
+    return name.split(" ").map((wd) => {
+      const n = normA(wd);
+      if (COMMON_NAMES.includes(n) || n.length < 3) return wd;
+      let best = null, bd = 9;
+      for (const c of COMMON_NAMES) { const dd = lev(n, c); if (dd < bd) { bd = dd; best = c; } }
+      return bd === 1 && n.length >= 4 ? best : wd;
+    }).join(" ");
+  }
+  function fixAddress(addr, gov) {
+    if (!gov || !addr) return addr;
+    return addr.split(" - ").map((part) => part.split(" ").map((wd) => (lev(normA(wd), normA(gov)) <= 1 && wd.length >= 3 ? gov : wd)).join(" ")).join(" - ");
+  }
+
+  /** card front canvas -> {name, address} */
+  async function readCardText(card) {
+    const W = card.width, H = card.height;
+    // name + address block: right side, between the header and the ID number
+    const sx = W * 0.49, sy = H * 0.22, sw = W * 0.48, sh = H * 0.4;
+    const scale = 1000 / sw;
+    const c = document.createElement("canvas");
+    c.width = Math.round(sw * scale); c.height = Math.round(sh * scale);
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(card, sx, sy, sw, sh, 0, 0, c.width, c.height);
+    // keep dark ink, drop the coloured background: use the brightest channel
+    const img = ctx.getImageData(0, 0, c.width, c.height), d = img.data;
+    let lo = 255, hi = 0;
+    for (let i = 0; i < d.length; i += 4) { const v = Math.max(d[i], d[i + 1], d[i + 2]); d[i] = v; if (v < lo) lo = v; if (v > hi) hi = v; }
+    const span = Math.max(1, hi - lo);
+    for (let i = 0; i < d.length; i += 4) { const v = Math.round(((d[i] - lo) / span) * 255); d[i] = d[i + 1] = d[i + 2] = v; }
+    ctx.putImageData(img, 0, 0);
+    const w = await ocrWorker();
+    const r = await w.recognize(c);
+    const HEAD = /جمهوري|مصر|العربي|بطاق|تحقيق|الشخصي/;
+    const lines = r.data.text.split("\n")
+      .map((l) => l.replace(/[\u064B-\u0652\u0640]/g, "").replace(/[^\u0621-\u064A\s-]/g, " ")
+        .split(/\s+/).filter((x) => x.length > 1 || x === "-").join(" ").replace(/^-+|-+$/g, "").trim())
+      .filter((l) => (l.match(/[\u0621-\u064A]/g) || []).length >= 3 && !HEAD.test(l));
+    return { name: fixName(lines.slice(0, 2).join(" ").trim()), address: lines.slice(2, 4).join(" - ").trim() };
+  }
+
   /** button that opens the live camera to read the ID number into a field */
   function cardPhotoButton(onNid, label = "صوّر البطاقة") {
     return h("button", { class: "btn", type: "button", onclick: () => {
-      const sc = liveScanner({ card: true, hint: "حط وش البطاقة جوه الإطار وثبّت الموبايل", onNid: (nid) => { sc.stop(); closeModal(); toast("الرقم القومي: " + nid + " (راجعه)", "ok"); onNid(nid); } });
+      const sc = liveScanner({ card: true, hint: "حط وش البطاقة جوه الإطار وثبّت الموبايل", onNid: (nid, frame) => { sc.stop(); closeModal(); toast("اتقرا الرقم القومي، راجعه", "ok"); onNid(nid, frame); } });
       openModal("قراءة البطاقة", h("div", { class: "stack" }, sc.el,
         h("p", { class: "muted small" }, "التطبيق بيقرا الرقم القومي لوحده. نوّر كويس وخلّي البطاقة مالية الإطار ومن غير لمعة.")), () => sc.stop());
       sc.start();
@@ -596,7 +666,8 @@
           h("div", { class: "grow" },
             h("h2", { class: "worker-name" }, w.name),
             h("div", { class: "muted" }, displayId(w.nid)),
-            h("div", { class: "muted small" }, [w.company, w.job, w.phone, p ? p.age + " سنة" : ""].filter(Boolean).join(" · "))
+            h("div", { class: "muted small" }, [w.company, w.job, w.phone, p ? p.age + " سنة" : ""].filter(Boolean).join(" · ")),
+            w.address ? h("div", { class: "muted small" }, w.address) : null
           )
         ),
         h("div", { class: "badges" }, indBadge, talkBadge)
@@ -685,6 +756,7 @@
     const company = h("input", { class: "input", value: w.company || "", list: "companiesList" });
     const job = h("input", { class: "input", value: w.job || "" });
     const phone = h("input", { class: "input", value: w.phone || "", inputmode: "tel" });
+    const address = h("input", { class: "input", value: w.address || "" });
     let face = null;
     const faceHolder = h("div", { class: "face-holder" }, avatar(w, 72));
     const faceBtn = h("button", { class: "btn", type: "button", onclick: async () => {
@@ -696,13 +768,13 @@
     const form = h("form", { class: "stack", onsubmit: async (e) => {
       e.preventDefault(); busy(save, true);
       try {
-        const patch = { name: name.value.trim(), company: company.value.trim(), job: job.value.trim(), phone: phone.value.trim() };
+        const patch = { name: name.value.trim(), company: company.value.trim(), job: job.value.trim(), phone: phone.value.trim(), address: address.value.trim() };
         if (face) { patch.photo = face.thumb; patch.hasFace = true; await S.saveFace(w.nid, patch.name, face.descriptor); facesCache = null; }
         const nw = await S.updateWorker(w.nid, patch);
         toast("اتحفظ", "ok"); closeModal(); done && done(nw);
       } catch (err) { toast(errMsg(err), "err"); busy(save, false); }
     } },
-      field("الاسم بالكامل", name), field("الشركة / المقاول", company), field("الوظيفة", job), field("التليفون", phone),
+      field("الاسم بالكامل", name), field("الشركة / المقاول", company), field("الوظيفة", job), field("العنوان", address), field("التليفون", phone),
       h("div", { class: "row" }, faceHolder, faceBtn), save);
     // captureFace uses the modal too, so re-open this dialog after it
     editWorkerDialog.reopen = () => openModal("تعديل بيانات العامل", form);
@@ -788,7 +860,7 @@
       me.role === "master" ? tile("#/admin", "admin", "لوحة الأدمن", "تقارير، أوفيسرز، باسوردات، وإكسل") : null
     );
     const todayBox = h("div", { class: "card" }, h("h3", null, "محاضراتك النهارده"), h("div", { class: "muted" }, "بيحمّل..."));
-    setView(pageTitle("أهلاً " + me.name, "النهارده " + fmtDate(today())), tiles, todayBox);
+    setView(pageTitle("أهلاً " + me.name, "النهارده " + fmtDate(today())), tiles, todayBox, shareCard());
     try {
       const mine = await myTodaySessions();
       todayBox.innerHTML = ""; todayBox.appendChild(h("h3", null, "محاضراتك النهارده"));
@@ -796,6 +868,38 @@
       mine.forEach((s) => todayBox.appendChild(sessionRow(s)));
     } catch (e) { todayBox.lastChild.textContent = errMsg(e); }
   }
+  /* ---------- share / install ---------- */
+  let installPrompt = null;
+  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; });
+  const isStandalone = () => window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const appUrl = () => location.origin + location.pathname.replace(/index\.html$/, "");
+  function shareCard() {
+    const url = appUrl();
+    const qr = h("div", { class: "share-qr", html: qrSvg(url, 4) });
+    const shareBtn = h("button", { class: "btn primary", type: "button", onclick: async () => {
+      const data = { title: "HSE Training Tracker", text: "تطبيق متابعة الاندكشن والمحاضرات", url };
+      try {
+        if (navigator.share) await navigator.share(data);
+        else { await navigator.clipboard.writeText(url); toast("اتنسخ اللينك", "ok"); }
+      } catch (e) { if (e && e.name !== "AbortError") { try { await navigator.clipboard.writeText(url); toast("اتنسخ اللينك", "ok"); } catch (x) { toast(url); } } }
+    } }, "شارك اللينك");
+    const installBtn = h("button", { class: "btn", type: "button", onclick: async () => {
+      if (installPrompt) { installPrompt.prompt(); try { await installPrompt.userChoice; } catch (e) {} installPrompt = null; }
+      else openModal("تثبيت التطبيق", h("div", { class: "stack" },
+        h("p", null, "من قايمة المتصفح:"),
+        h("p", null, "• Chrome على أندرويد: ⋮ ← Add to Home screen / Install app"),
+        h("p", null, "• Safari على آيفون: زرار المشاركة ⬆ ← Add to Home Screen"),
+        h("p", { class: "muted small" }, "بعدها هيبقى ليه أيقونة على الشاشة ويفتح زي أي تطبيق.")));
+    } }, "ثبّت التطبيق على الموبايل");
+    return h("div", { class: "card share" },
+      h("h3", null, "شارك التطبيق مع الأوفيسرز"),
+      h("div", { class: "share-body" }, qr,
+        h("div", { class: "stack grow" },
+          h("p", { class: "muted small" }, "خلّي الأوفيسر يصوّر الـ QR ده بكاميرا موبايله، أو ابعتله اللينك. وبعدها تعمله حساب من لوحة الأدمن."),
+          h("div", { class: "muted small", dir: "ltr" }, url),
+          h("div", { class: "row wrap" }, shareBtn, isStandalone() ? null : installBtn))));
+  }
+
   function tile(href, ic, title, sub) {
     return h("a", { class: "tile", href }, h("div", { class: "tile-ico" }, icon(ic)), h("div", null, h("div", { class: "tile-title" }, title), h("div", { class: "tile-sub" }, sub)));
   }
@@ -919,9 +1023,10 @@
     const nid = h("input", { class: "input big-input", inputmode: foreign ? "text" : "numeric", autocomplete: "off", placeholder: foreign ? "رقم جواز السفر" : "الرقم القومي (14 رقم)", required: true, value: pre.nid ? (foreign ? pre.nid.slice(2) : pre.nid) : "" });
     const nidInfo = h("div", { class: "hint" });
     const name = h("input", { class: "input", placeholder: "الاسم بالكامل زي البطاقة", required: true, autocomplete: "off" });
-    const company = h("input", { class: "input", placeholder: "مثال: Energy China / مقاول الحفر", list: "companiesList", autocomplete: "off" });
+    const company = h("input", { class: "input", placeholder: "اسم الشركة أو المقاول", list: "companiesList", autocomplete: "off" });
     const job = h("input", { class: "input", placeholder: "مثال: فني لحام، سواق ونش", autocomplete: "off" });
     const phone = h("input", { class: "input", inputmode: "tel", placeholder: "اختياري", autocomplete: "off" });
+    const address = h("input", { class: "input", placeholder: "اختياري", autocomplete: "off" });
     const doInd = h("input", { type: "checkbox", checked: true });
     let face = null;
     const faceHolder = h("div", { class: "face-holder" }, h("div", { class: "avatar ph", style: "width:72px;height:72px" }, "؟"));
@@ -972,6 +1077,8 @@
       try {
         let w = await S.createWorker({
           nid: id, name: name.value.trim(), company: company.value.trim(), job: job.value.trim(), phone: phone.value.trim(),
+          address: address.value.trim(),
+          ...(() => { const p = foreign ? null : parseNid(id); return p ? { birthDate: p.birth, gender: p.gender, governorate: p.gov } : {}; })(),
           photo: face ? face.thumb : "", hasFace: !!face, inductionDate: ""
         });
         if (face) { await S.saveFace(id, w.name, face.descriptor); facesCache = null; }
@@ -980,11 +1087,26 @@
         afterRegister(w, pre.returnTo);
       } catch (err) { toast(errMsg(err), "err"); busy(save, false); }
     } },
-      h("div", { class: "row wrap" }, cardPhotoButton((v) => { if (foreign) fToggle.querySelector("input").click(); nid.value = v; updNid(); })),
+      h("div", { class: "row wrap" }, cardPhotoButton(async (v, frame) => {
+        if (foreign) fToggle.querySelector("input").click();
+        nid.value = v; updNid();
+        if (!frame) return;
+        const oldPh = name.placeholder;
+        name.placeholder = "بيقرا الاسم من البطاقة..."; address.placeholder = "بيقرا العنوان...";
+        try {
+          const t = await readCardText(frame);
+          if (t.name && !name.value.trim()) name.value = t.name;
+          const pn = parseNid(v);
+          if (t.address && !address.value.trim()) address.value = fixAddress(t.address, pn && pn.gov);
+          toast(t.name ? "اتقرا الاسم والعنوان، راجعهم وصلّح أي غلط" : "مقدرتش أقرا الاسم، اكتبه بإيدك", t.name ? "ok" : "err");
+        } catch (e) { toast("مقدرتش أقرا الاسم، اكتبه بإيدك", "err"); }
+        name.placeholder = oldPh; address.placeholder = "اختياري";
+      }, "صوّر البطاقة (الرقم والاسم)")),
       field("رقم الهوية", nid, nidInfo), fToggle, existing,
       field("الاسم بالكامل", name),
       field("الشركة / المقاول", company),
       field("الوظيفة", job),
+      field("العنوان", address),
       field("التليفون", phone),
       h("div", { class: "field" }, h("span", { class: "field-label" }, "صورة الوش (عشان التعرف عليه بالكاميرا بعد كده)"), h("div", { class: "row" }, faceHolder, faceBtn)),
       h("label", { class: "check" }, doInd, "العامل أخد المحاضرة التعريفية (الاندكشن) النهارده"),
@@ -1014,7 +1136,7 @@
     (async () => {
       try {
         if (!companiesCache && S.mode === "demo") companiesCache = Array.from(new Set((await S.listAllWorkers()).map((w) => w.company).filter(Boolean)));
-        (companiesCache || ["Smart Power", "Energy China"]).forEach((c) => dl.appendChild(h("option", { value: c })));
+        (companiesCache || []).forEach((c) => dl.appendChild(h("option", { value: c })));
       } catch (e) {}
     })();
     return dl;
@@ -1171,6 +1293,7 @@
       h("div", { class: "row wrap between" }, countEl, h("div", { class: "row" },
         h("button", { class: "btn small", type: "button", onclick: () => exportXlsx("workers-" + today() + ".xlsx", [["العمال", filtered.map((w) => ({
           "الاسم": w.name, "رقم الهوية": w.nid, "الشركة": w.company || "", "الوظيفة": w.job || "", "التليفون": w.phone || "",
+          "العنوان": w.address || "", "تاريخ الميلاد": w.birthDate || "", "النوع": w.gender || "", "المحافظة": w.governorate || "",
           "تاريخ الاندكشن": w.inductionDate || "", "محاضرة النهارده": talkedToday.has(w.nid) ? "نعم" : "لا", "الكود": w.code
         }))]]) }, "إكسل"),
         h("button", { class: "btn small", type: "button", onclick: () => {
@@ -1213,7 +1336,7 @@
 
   window.addEventListener("hashchange", route);
   $("#logoutBtn").addEventListener("click", () => S.logout());
-  $("#siteName").textContent = CFG.siteName || "";
+  $("#siteName").textContent = CFG.siteName || "HSE Training Tracker";
   $("#demoBanner").hidden = S.mode !== "demo";
   S.onAuth(() => route());
   S.init();
