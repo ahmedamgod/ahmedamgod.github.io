@@ -132,6 +132,31 @@
       async deleteWorker(nid) { await tick(); delete data.workers[nid]; delete data.faces[nid]; save(); },
       async searchWorkers(q) { await tick(); return vals(data.workers).filter((w) => matchesName(w, q)).slice(0, 30); },
       async listAllWorkers() { await tick(); return vals(data.workers).sort(byTsDesc); },
+      async existingIds(ids) { await tick(); return new Set(ids.filter((id) => data.workers[id])); },
+      /** items: [{ worker, date }] -> creates workers + one induction session per date */
+      async importWorkers(items, onProgress) {
+        if (current.role !== "master") throw new Error("الاستيراد من الأدمن بس");
+        const sessions = {};
+        let done = 0;
+        for (const it of items) {
+          if (data.workers[it.worker.nid]) continue;
+          let s = sessions[it.date];
+          if (!s) {
+            const id = "s_" + Date.now().toString(36) + randomCode().slice(0, 4);
+            s = sessions[it.date] = { id, type: "induction", topic: "Induction – استيراد من إكسل", location: "", date: it.date, officerUid: current.uid, officerUsername: current.username, officerName: current.name, ts: Date.now(), count: 0, imported: true };
+            data.sessions[id] = s;
+          }
+          const w = prepareWorker(Object.assign({}, it.worker, { inductionDate: it.date, inductionBy: current.name, ts: Date.now(), createdBy: current.uid, createdByName: current.name, imported: true }));
+          data.workers[w.nid] = w;
+          const aid = s.id + "_" + w.nid;
+          data.attendance[aid] = { id: aid, sessionId: s.id, nid: w.nid, workerName: w.name, company: w.company || "", type: "induction", topic: s.topic, date: s.date, officerUid: current.uid, officerUsername: current.username, officerName: current.name, ts: Date.now(), imported: true };
+          s.count++;
+          done++;
+          if (onProgress && done % 50 === 0) onProgress(done);
+        }
+        save();
+        return done;
+      },
       async listFaces() { await tick(); return vals(data.faces); },
       async saveFace(nid, name, descriptor) { data.faces[nid] = { nid, name, d: descriptor }; save(); },
 
@@ -323,6 +348,43 @@
         const map = new Map();
         [...a.docs, ...b.docs].forEach((d) => map.set(d.id, d.data()));
         return Array.from(map.values()).filter((w) => matchesName(w, q)).slice(0, 30);
+      },
+      async existingIds(ids) {
+        const found = new Set();
+        const FP = firebase.firestore.FieldPath.documentId();
+        for (let i = 0; i < ids.length; i += 30) {
+          const chunk = ids.slice(i, i + 30);
+          const snap = await db.collection("workers").where(FP, "in", chunk).get();
+          snap.docs.forEach((d) => found.add(d.id));
+        }
+        return found;
+      },
+      async importWorkers(items, onProgress) {
+        if (current.role !== "master") throw new Error("الاستيراد من الأدمن بس");
+        const existing = await this.existingIds(items.map((it) => it.worker.nid));
+        const todo = items.filter((it) => !existing.has(it.worker.nid));
+        const sessions = {};
+        const counts = {};
+        let batch = db.batch(), ops = 0, done = 0;
+        const flush = async () => { if (ops) { await batch.commit(); batch = db.batch(); ops = 0; } };
+        for (const it of todo) {
+          let s = sessions[it.date];
+          if (!s) {
+            const ref = db.collection("sessions").doc();
+            s = sessions[it.date] = { id: ref.id, type: "induction", topic: "Induction – استيراد من إكسل", location: "", date: it.date, officerUid: current.uid, officerUsername: current.username, officerName: current.name, ts: Date.now(), count: 0, imported: true };
+            batch.set(ref, s); ops++;
+          }
+          const w = prepareWorker(Object.assign({}, it.worker, { inductionDate: it.date, inductionBy: current.name, ts: Date.now(), createdBy: current.uid, createdByName: current.name, imported: true }));
+          batch.set(db.collection("workers").doc(w.nid), w); ops++;
+          const aid = s.id + "_" + w.nid;
+          batch.set(db.collection("attendance").doc(aid), { id: aid, sessionId: s.id, nid: w.nid, workerName: w.name, company: w.company || "", type: "induction", topic: s.topic, date: s.date, officerUid: current.uid, officerUsername: current.username, officerName: current.name, ts: Date.now(), imported: true }); ops++;
+          counts[s.id] = (counts[s.id] || 0) + 1;
+          done++;
+          if (ops >= 400) { await flush(); if (onProgress) onProgress(done); }
+        }
+        for (const id in counts) { batch.update(db.collection("sessions").doc(id), { count: counts[id] }); ops++; if (ops >= 400) await flush(); }
+        await flush();
+        return done;
       },
       async listAllWorkers() {
         const s = await db.collection("workers").get();

@@ -1148,13 +1148,14 @@
     if (me.role !== "master") { location.hash = "#/home"; return; }
     tab = tab || "reports";
     const tabs = h("div", { class: "seg" },
-      [["reports", "التقارير"], ["officers", "الأوفيسرز"], ["workers", "العمال"]].map(([k, l]) =>
+      [["reports", "التقارير"], ["officers", "الأوفيسرز"], ["workers", "العمال"], ["import", "استيراد إكسل"]].map(([k, l]) =>
         h("a", { class: "seg-btn" + (k === tab ? " on" : ""), href: "#/admin/" + k }, l)));
     const body = h("div");
     setView(pageTitle("لوحة الأدمن"), tabs, body);
     if (tab === "reports") adminReports(body);
     if (tab === "officers") adminOfficers(body);
     if (tab === "workers") adminWorkers(body);
+    if (tab === "import") adminImport(body);
   }
 
   function adminReports(body) {
@@ -1254,6 +1255,146 @@
       h("p", null, "اسم المستخدم هيفضل زي ما هو: ", h("b", { dir: "ltr" }, u.username)),
       field("الباسورد الجديد", pass), btn));
     setTimeout(() => pass.focus(), 50);
+  }
+
+  /* ---------- import workers from Excel ---------- */
+  const IMPORT_FIELDS = [
+    ["nid", "الرقم القومي *", /رقم.?قومي|القومي|الرقم|national|nid|^id$|هوي|بطاق/i],
+    ["name", "الاسم *", /اسم|name/i],
+    ["job", "الوظيفة", /وظيف|مهن|job|title|position/i],
+    ["company", "الشركة / المقاول", /شرك|مقاول|company|contractor/i],
+    ["phone", "التليفون", /تليفون|هاتف|موبايل|جوال|phone|mobile/i],
+    ["date", "تاريخ الاندكشن", /تاريخ|date/i]
+  ];
+  function excelDate(v) {
+    if (v == null || v === "") return "";
+    if (v instanceof Date && !isNaN(v)) return U.todayStr(v);
+    if (typeof v === "number" && v > 20000 && v < 80000) { const d = new Date(Math.round((v - 25569) * 86400000)); return U.todayStr(new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())); }
+    const t = toWesternDigits(String(v)).trim();
+    let m = t.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+    if (m) return m[1] + "-" + pad(+m[2]) + "-" + pad(+m[3]);
+    m = t.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/);
+    if (m) { const y = m[3].length === 2 ? 2000 + +m[3] : +m[3]; return y + "-" + pad(+m[2]) + "-" + pad(+m[1]); }
+    return "";
+  }
+  function adminImport(body) {
+    const file = h("input", { type: "file", accept: ".xlsx,.xls,.csv", hidden: true });
+    const pick = h("button", { class: "btn primary big", type: "button", onclick: () => file.click() }, "اختار شيت الإكسل");
+    const tpl = h("button", { class: "btn small", type: "button", onclick: () => exportXlsx("نموذج-العمال.xlsx", [["العمال", [
+      { "الرقم القومي": "", "الاسم": "", "الوظيفة": "", "الشركة": "", "التليفون": "", "تاريخ الاندكشن": "" }]]]) }, "نزّل نموذج شيت فاضي");
+    const out = h("div");
+    body.append(h("div", { class: "card stack" },
+      h("h3", null, "استيراد عمال أخدوا الاندكشن"),
+      h("p", { class: "muted small" }, "ارفع شيت إكسل فيه الرقم القومي والاسم (والوظيفة والشركة لو موجودين). التطبيق هيتعرف على الأعمدة لوحده، وهيوريك معاينة قبل ما يحفظ. العمال المتسجلين قبل كده هيتسابوا زي ما هما."),
+      pick, file, h("div", null, tpl)), out);
+
+    file.addEventListener("change", async () => {
+      const f = file.files && file.files[0]; file.value = "";
+      if (!f) return;
+      busy(pick, true, "بيقرا الشيت...");
+      out.innerHTML = "";
+      try {
+        await loadScript(LIBS.xlsx);
+        const wb = XLSX.read(await f.arrayBuffer(), { type: "array", cellDates: true });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: "" }).filter((r) => r.some((c) => String(c).trim() !== ""));
+        if (rows.length < 2) throw new Error("الشيت فاضي أو مفيهوش غير العناوين");
+        // header row: first row that has a name/id-looking header
+        let hi = rows.findIndex((r) => r.some((c) => IMPORT_FIELDS[0][2].test(String(c))) && r.some((c) => IMPORT_FIELDS[1][2].test(String(c))));
+        if (hi < 0) hi = 0;
+        importPreview(out, f.name, rows[hi].map((c) => String(c).trim()), rows.slice(hi + 1));
+      } catch (e) { toast(errMsg(e), "err"); }
+      busy(pick, false);
+    });
+  }
+  function importPreview(out, fname, headers, rows) {
+    // auto-map columns
+    const map = {};
+    const used = new Set();
+    IMPORT_FIELDS.forEach(([k, , re]) => {
+      const i = headers.findIndex((hd, idx) => !used.has(idx) && re.test(hd));
+      if (i >= 0) { map[k] = i; used.add(i); }
+    });
+    if (map.nid == null) {
+      // guess: column whose values look like 14-digit IDs
+      const i = headers.findIndex((_, idx) => rows.slice(0, 20).filter((r) => /^[23]\d{13}$/.test(toWesternDigits(String(r[idx])).replace(/\D/g, ""))).length >= 3);
+      if (i >= 0) map.nid = i;
+    }
+    const selects = {};
+    const mapRow = h("div", { class: "import-map" }, IMPORT_FIELDS.map(([k, label]) => {
+      const sel = h("select", { class: "input" }, h("option", { value: "" }, "—"), headers.map((hd, i) => h("option", { value: String(i) }, hd || "عمود " + (i + 1))));
+      sel.value = map[k] != null ? String(map[k]) : "";
+      sel.addEventListener("change", analyze);
+      selects[k] = sel;
+      return field(label, sel);
+    }));
+    const defDate = h("input", { class: "input", type: "date", value: today() });
+    defDate.addEventListener("change", analyze);
+    const summary = h("div");
+    const preview = h("div", { class: "list" });
+    const go = h("button", { class: "btn primary big", type: "button", disabled: true }, "حفظ");
+    out.innerHTML = "";
+    out.append(h("div", { class: "card stack" },
+      h("h3", null, "الملف: " + fname + " (" + rows.length + " صف)"),
+      h("p", { class: "muted small" }, "اتأكد إن كل خانة مربوطة بالعمود الصح:"),
+      mapRow,
+      field("تاريخ الاندكشن للصفوف اللي مفيهاش تاريخ", defDate),
+      summary, preview, go));
+
+    let valid = [];
+    async function analyze() {
+      const col = (k) => (selects[k].value === "" ? null : +selects[k].value);
+      const ci = Object.fromEntries(IMPORT_FIELDS.map(([k]) => [k, col(k)]));
+      valid = []; const bad = []; const seen = new Set(); let dup = 0;
+      rows.forEach((r, i) => {
+        const raw = ci.nid == null ? "" : String(r[ci.nid]);
+        const nid = toWesternDigits(raw).replace(/\D/g, "");
+        const name = ci.name == null ? "" : String(r[ci.name]).trim().replace(/\s+/g, " ");
+        if (!nid && !name) return;
+        if (!/^\d{14}$/.test(nid) || !parseNid(nid)) { bad.push({ row: i + 2, why: "رقم قومي غلط: " + (raw || "فاضي"), name }); return; }
+        if (!name) { bad.push({ row: i + 2, why: "مفيش اسم", name: nid }); return; }
+        if (seen.has(nid)) { dup++; return; }
+        seen.add(nid);
+        const p = parseNid(nid);
+        const get = (k) => (ci[k] == null ? "" : String(r[ci[k]]).trim());
+        valid.push({
+          date: (ci.date != null && excelDate(r[ci.date])) || defDate.value,
+          worker: { nid, name, job: get("job"), company: get("company"), phone: toWesternDigits(get("phone")), address: "", photo: "", hasFace: false,
+            birthDate: p.birth, gender: p.gender, governorate: p.gov }
+        });
+      });
+      summary.innerHTML = ""; preview.innerHTML = "";
+      summary.appendChild(h("div", { class: "muted" }, "بيتأكد مين متسجل قبل كده..."));
+      let existing = new Set();
+      try { existing = await S.existingIds(valid.map((v) => v.worker.nid)); } catch (e) { toast(errMsg(e), "err"); }
+      const fresh = valid.filter((v) => !existing.has(v.worker.nid));
+      summary.innerHTML = "";
+      summary.append(h("div", { class: "stats" },
+        stat(fresh.length, "هيتضافوا"), stat(existing.size, "متسجلين قبل كده"), stat(bad.length, "فيهم غلط"), stat(dup, "متكررين في الشيت")));
+      if (bad.length) summary.appendChild(h("details", { class: "card" }, h("summary", null, "الصفوف اللي فيها غلط (" + bad.length + ")"),
+        h("div", { class: "list" }, bad.slice(0, 200).map((b) => h("div", { class: "small" }, "صف " + b.row + ": " + b.why + (b.name ? " — " + b.name : ""))))));
+      fresh.slice(0, 8).forEach((v) => preview.appendChild(h("div", { class: "list-item" },
+        h("div", { class: "grow" }, h("div", { class: "strong" }, v.worker.name), h("div", { class: "muted small" }, [v.worker.nid, v.worker.job, v.worker.company, "اندكشن " + fmtDate(v.date)].filter(Boolean).join(" · "))))));
+      if (fresh.length > 8) preview.appendChild(h("div", { class: "muted small center" }, "و " + (fresh.length - 8) + " كمان..."));
+      valid = fresh;
+      go.disabled = !fresh.length;
+      go.textContent = fresh.length ? "حفظ " + fresh.length + " عامل" : "مفيش حد جديد يتحفظ";
+    }
+    go.addEventListener("click", async () => {
+      if (!valid.length) return;
+      if (!confirm("هيتسجل " + valid.length + " عامل على إنهم أخدوا الاندكشن. تكمل؟")) return;
+      busy(go, true, "بيحفظ...");
+      try {
+        const n = await S.importWorkers(valid, (k) => (go.textContent = "بيحفظ... " + k + " / " + valid.length));
+        facesCache = null; companiesCache = null;
+        toast("اتحفظ " + n + " عامل ✓", "ok");
+        out.innerHTML = "";
+        out.appendChild(h("div", { class: "card center stack" }, h("h2", null, "✓ اتحفظ " + n + " عامل"),
+          h("a", { class: "btn primary", href: "#/admin/workers" }, "شوف العمال"),
+          h("p", { class: "muted small" }, "تقدر تطبعلهم كروت QR من تاب العمال ← طباعة كروت.")));
+      } catch (e) { toast(errMsg(e), "err"); busy(go, false); }
+    });
+    analyze();
   }
 
   async function adminWorkers(body) {
