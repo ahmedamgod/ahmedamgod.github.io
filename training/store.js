@@ -67,8 +67,9 @@
     const SESSION_KEY = "hse_training_demo_user";
     let data;
     try { data = JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) { data = null; }
+    if (data && !data.announcements) data.announcements = {};
     if (!data) {
-      data = {
+      data = { announcements: {},
         users: { u_admin: { uid: "u_admin", username: "admin", password: "admin", name: "مدير النظام", role: "master", active: true, ts: Date.now() } },
         workers: {}, faces: {}, sessions: {}, attendance: {}
       };
@@ -205,6 +206,26 @@
       async getSession(id) { await tick(); return data.sessions[id] || null; },
       async listSessionsByDate(date) { await tick(); return vals(data.sessions).filter((s) => s.date === date).sort(byTsDesc); },
       async setSessionCount(id, n) { if (data.sessions[id]) { data.sessions[id].count = n; save(); } },
+
+      /* ---- الأوامر الإدارية ---- */
+      watchAnnouncements(cb) {
+        const push = () => cb(vals(data.announcements).sort(byTsDesc).slice(0, 30));
+        this._annCb = push; setTimeout(push, 0);
+        return () => { this._annCb = null; };
+      },
+      async addAnnouncement({ text, urgent, speak }) {
+        await tick();
+        if (current.role !== "master") throw new Error("الأوامر الإدارية من الماستر بس");
+        const id = "a_" + Date.now().toString(36) + randomCode().slice(0, 4);
+        data.announcements[id] = { id, text, urgent: !!urgent, speak: !!speak, createdBy: current.uid, createdByName: current.name, ts: Date.now(), acks: {} };
+        save(); if (this._annCb) this._annCb();
+      },
+      async deleteAnnouncement(id) { await tick(); delete data.announcements[id]; save(); if (this._annCb) this._annCb(); },
+      async ackAnnouncement(id) {
+        const a = data.announcements[id]; if (!a) return;
+        a.acks = a.acks || {}; a.acks[current.uid] = { uid: current.uid, name: current.name, username: current.username, ts: Date.now() }; save();
+      },
+      async listAcks(id) { await tick(); const a = data.announcements[id]; return a ? vals(a.acks || {}).sort((x, y) => x.ts - y.ts) : []; },
       async deleteSessions(ids) {
         await tick();
         if (current.role !== "master") throw new Error("مسح المحاضرات من الأدمن بس");
@@ -509,6 +530,33 @@
       },
       async getSession(id) { const s = await db.collection("sessions").doc(id).get(); return s.exists ? s.data() : null; },
       async setSessionCount(id, n) { await db.collection("sessions").doc(id).update({ count: n }); },
+
+      /* ---- الأوامر الإدارية ---- */
+      watchAnnouncements(cb) {
+        return db.collection("announcements").orderBy("ts", "desc").limit(30)
+          .onSnapshot((snap) => cb(docs(snap)), (e) => console.warn("announcements", e));
+      },
+      async addAnnouncement({ text, urgent, speak }) {
+        if (current.role !== "master") throw new Error("الأوامر الإدارية من الماستر بس");
+        const ref = db.collection("announcements").doc();
+        try { await ref.set({ id: ref.id, text, urgent: !!urgent, speak: !!speak, createdBy: current.uid, createdByName: current.name, ts: Date.now() }); }
+        catch (e) { throw authError(e); }
+      },
+      async deleteAnnouncement(id) {
+        const acks = await db.collection("announcements").doc(id).collection("acks").get();
+        const batch = db.batch();
+        acks.docs.forEach((d) => batch.delete(d.ref));
+        batch.delete(db.collection("announcements").doc(id));
+        try { await batch.commit(); } catch (e) { throw authError(e); }
+      },
+      async ackAnnouncement(id) {
+        await db.collection("announcements").doc(id).collection("acks").doc(current.uid)
+          .set({ uid: current.uid, name: current.name, username: current.username, ts: Date.now() });
+      },
+      async listAcks(id) {
+        const s = await db.collection("announcements").doc(id).collection("acks").get();
+        return s.docs.map((d) => d.data()).sort((a, b) => a.ts - b.ts);
+      },
       /* بيمسح المحاضرات ومعاها تسجيلات الحضور بتاعتها */
       async deleteSessions(ids) {
         if (current.role !== "master") throw new Error("مسح المحاضرات من الأدمن بس");

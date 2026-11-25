@@ -321,3 +321,18 @@ input, textarea, select, [contenteditable] { -webkit-user-select: text; user-sel
 .tick.on { background: var(--orange); border-color: var(--orange); color: #1b1200; }
 select.input { text-overflow: ellipsis; }
 .page-title h1 { padding-inline-end: 40px; }
+
+/* ---------- orders / announcements ---------- */
+.bell { position: relative; width: 36px; height: 36px; display: grid; place-items: center; color: #fff; border-radius: 10px; }
+.bell svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.bell.ring svg { color: var(--orange); animation: ring 1.6s ease-in-out infinite; transform-origin: 50% 10%; }
+@keyframes ring { 0%, 60%, 100% { transform: rotate(0); } 10% { transform: rotate(14deg); } 20% { transform: rotate(-12deg); } 30% { transform: rotate(8deg); } 40% { transform: rotate(-6deg); } }
+.bell-n { position: absolute; top: -2px; inset-inline-end: -4px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: var(--bad); color: #fff; font-size: 11px; font-weight: 800; display: grid; place-items: center; }
+.order-item { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.order-item.new { border: 2px solid var(--orange); }
+.order-item.urgent { border-inline-start: 6px solid var(--bad); }
+.order-text { font-size: 1.12rem; font-weight: 700; white-space: pre-wrap; line-height: 1.6; }
+.order-alert .order-text { font-size: 1.3rem; }
+.order-alert.urgent .order-text { color: var(--bad); }
+.pill-urgent { background: var(--bad-bg); color: var(--bad); }
+textarea.input { resize: vertical; min-height: 110px; font: inherit; }

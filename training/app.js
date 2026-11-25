@@ -68,7 +68,8 @@
     name: '<path d="M4 20h16M6 16l5-12h2l5 12M8 12h8"/>',
     print: '<path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M7 14h10v7H7z"/>',
     check: '<path d="m5 12 4.5 4.5L19 7"/>',
-    x: '<path d="M6 6l12 12M18 6 6 18"/>'
+    x: '<path d="M6 6l12 12M18 6 6 18"/>',
+    bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>'
   };
   const icon = (n) => svgIcon(ICONS[n] || "");
 
@@ -915,6 +916,7 @@
     const tiles = h("div", { class: "tiles" },
       tile("#/lookup", "search", "كشف على عامل", "أخد الاندكشن ومحاضرة النهارده ولا لأ؟"),
       tile("#/talk", "talk", "محاضرة اليوم", "ابدأ محاضرة وسجّل الحاضرين"),
+      tile("#/orders", "bell", "الأوامر الإدارية", me.role === "master" ? "ابعت أمر لكل الناس" : "الأوامر والتعليمات"),
       me.role === "master" ? tile("#/register", "add", "عامل جديد (اندكشن)", "تسجيل عامل وطباعة الكارت") : null,
       me.role === "master" ? tile("#/admin/import", "admin", "استيراد إكسل", "ارفع شيت العمال اللي أخدوا الاندكشن") : null,
       me.role === "master" ? tile("#/admin", "admin", "لوحة الأدمن", "تقارير، أوفيسرز، باسوردات، وإكسل") : null
@@ -1647,6 +1649,184 @@
     draw();
   }
 
+  /* ================= الأوامر الإدارية ================= */
+  let orders = [], ordersUnsub = null, ordersReady = false, ordersUid = null;
+  const seenKey = () => "hse_orders_seen:" + (S.currentUser() || {}).uid;
+  const ackKey = () => "hse_orders_ack:" + (S.currentUser() || {}).uid;
+  function getSeen() { try { return +localStorage.getItem(seenKey()) || 0; } catch (e) { return 0; } }
+  function setSeen(ts) { try { if (ts > getSeen()) localStorage.setItem(seenKey(), String(ts)); } catch (e) {} updateBell(); }
+  function getAcked() { try { return new Set(JSON.parse(localStorage.getItem(ackKey()) || "[]")); } catch (e) { return new Set(); } }
+  function markAcked(id) { const s = getAcked(); s.add(id); try { localStorage.setItem(ackKey(), JSON.stringify(Array.from(s).slice(-200))); } catch (e) {} }
+  const unread = () => { const me = S.currentUser(); const seen = getSeen(); return orders.filter((o) => o.ts > seen && o.createdBy !== (me && me.uid)); };
+  function updateBell() {
+    const n = unread().length, el = $("#bellN");
+    if (!el) return;
+    el.hidden = !n; el.textContent = n > 9 ? "9+" : String(n);
+    $("#bellBtn").classList.toggle("ring", n > 0);
+  }
+
+  function startOrders() {
+    const me = S.currentUser();
+    if (!me || ordersUid === me.uid) return;
+    stopOrders();
+    ordersUid = me.uid; ordersReady = false;
+    ordersUnsub = S.watchAnnouncements((list) => {
+      const before = new Set(orders.map((o) => o.id));
+      orders = list;
+      const fresh = ordersReady ? list.filter((o) => !before.has(o.id)) : unread();
+      const incoming = fresh.filter((o) => o.createdBy !== me.uid && o.ts > getSeen());
+      ordersReady = true;
+      updateBell();
+      if (incoming.length) alertOrder(incoming[0], incoming.length);
+      if ((location.hash || "").startsWith("#/orders")) drawOrdersList();
+    });
+  }
+  function stopOrders() { if (ordersUnsub) { try { ordersUnsub(); } catch (e) {} } ordersUnsub = null; orders = []; ordersUid = null; updateBell(); }
+
+  /* sound: urgent = alarm, normal = chime */
+  let audioCtx = null;
+  function actx() { try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === "suspended") audioCtx.resume(); } catch (e) {} return audioCtx; }
+  document.addEventListener("pointerdown", () => actx(), { once: true, capture: true });
+  function tone(ctx, f, t0, dur, type = "sine", vol = 0.25) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(ctx.destination); o.start(t0); o.stop(t0 + dur + 0.05);
+  }
+  function playOrderSound(urgent) {
+    const ctx = actx(); if (!ctx) return 0;
+    const t = ctx.currentTime + 0.05;
+    if (urgent) { for (let i = 0; i < 6; i++) { tone(ctx, 960, t + i * 0.5, 0.24, "square", 0.18); tone(ctx, 720, t + i * 0.5 + 0.25, 0.24, "square", 0.18); } return 3100; }
+    [784, 988, 1175, 1568].forEach((f, i) => tone(ctx, f, t + i * 0.16, 0.5, "sine", 0.3));
+    return 1000;
+  }
+  function speakOrder(text) {
+    try {
+      if (!("speechSynthesis" in window)) return;
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance("أمر إداري. " + text);
+      const v = speechSynthesis.getVoices().find((x) => /^ar/i.test(x.lang));
+      if (v) u.voice = v;
+      u.lang = (v && v.lang) || "ar-EG"; u.rate = 0.95;
+      speechSynthesis.speak(u);
+    } catch (e) {}
+  }
+  async function systemNotify(o) {
+    try {
+      if (!("Notification" in window) || Notification.permission !== "granted") return;
+      const reg = await navigator.serviceWorker.ready;
+      await reg.showNotification(o.urgent ? "🚨 أمر إداري عاجل" : "📢 أمر إداري", {
+        body: o.text + "\n— " + o.createdByName, tag: "order-" + o.id, renotify: true, requireInteraction: !!o.urgent,
+        icon: "icon-192.png", badge: "icon-192.png", vibrate: o.urgent ? [400, 150, 400, 150, 400] : [200, 100, 200], data: { url: "./#/orders" }
+      });
+    } catch (e) {}
+  }
+
+  function alertOrder(o, count) {
+    const wait = playOrderSound(o.urgent);
+    try { if (navigator.vibrate) navigator.vibrate(o.urgent ? [500, 200, 500, 200, 500] : [200, 100, 200]); } catch (e) {}
+    if (o.speak) setTimeout(() => speakOrder(o.text), wait);
+    if (document.hidden) systemNotify(o);
+    const done = async () => {
+      try { await S.ackAnnouncement(o.id); markAcked(o.id); } catch (e) {}
+      setSeen(Math.max(...orders.map((x) => x.ts), o.ts));
+      try { speechSynthesis.cancel(); } catch (e) {}
+      closeModal();
+      if ((location.hash || "").startsWith("#/orders")) drawOrdersList();
+    };
+    openModal(o.urgent ? "🚨 أمر إداري عاجل" : "📢 أمر إداري", h("div", { class: "stack order-alert" + (o.urgent ? " urgent" : "") },
+      h("div", { class: "order-text" }, o.text),
+      h("div", { class: "muted small" }, "من: " + o.createdByName + " · " + fmtDate(U.todayStr(new Date(o.ts))) + " " + fmtTime(o.ts)),
+      count > 1 ? h("a", { class: "muted small link", href: "#/orders" }, "وفيه " + (count - 1) + " أمر تاني، شوف الكل") : null,
+      h("div", { class: "row wrap" },
+        h("button", { class: "btn primary big", type: "button", onclick: done }, "✓ تم الاستلام"),
+        o.speak ? h("button", { class: "btn", type: "button", onclick: () => speakOrder(o.text) }, "🔊 اسمعه تاني") : null)));
+  }
+
+  let ordersListEl = null;
+  function drawOrdersList() {
+    if (!ordersListEl) return;
+    const me = S.currentUser(), acked = getAcked(), seen = getSeen();
+    ordersListEl.innerHTML = "";
+    if (!orders.length) { ordersListEl.appendChild(h("div", { class: "empty" }, "مفيش أوامر لسه")); return; }
+    orders.forEach((o) => {
+      const mine = o.createdBy === me.uid;
+      const isNew = !mine && o.ts > seen;
+      ordersListEl.appendChild(h("div", { class: "order-item" + (o.urgent ? " urgent" : "") + (isNew ? " new" : "") },
+        h("div", { class: "row between" },
+          h("span", { class: "pill " + (o.urgent ? "pill-urgent" : "pill-daily") }, o.urgent ? "عاجل" : "أمر إداري"),
+          h("span", { class: "muted small" }, fmtDate(U.todayStr(new Date(o.ts))) + " " + fmtTime(o.ts))),
+        h("div", { class: "order-text" }, o.text),
+        h("div", { class: "muted small" }, "من: " + o.createdByName),
+        h("div", { class: "row wrap" },
+          !mine ? (acked.has(o.id) ? h("span", { class: "hint ok" }, "✓ استلمته")
+            : h("button", { class: "btn small primary", type: "button", onclick: async (e) => {
+                busy(e.currentTarget, true);
+                try { await S.ackAnnouncement(o.id); markAcked(o.id); toast("✓ تم الاستلام", "ok"); } catch (err) { toast(errMsg(err), "err"); }
+                drawOrdersList();
+              } }, "✓ تم الاستلام")) : null,
+          h("button", { class: "btn small", type: "button", onclick: () => speakOrder(o.text) }, "🔊"),
+          me.role === "master" ? h("button", { class: "btn small", type: "button", onclick: () => showAcks(o) }, "مين استلم؟") : null,
+          me.role === "master" ? h("button", { class: "btn small danger", type: "button", onclick: async () => {
+            if (!confirm("تمسح الأمر ده؟")) return;
+            try { await S.deleteAnnouncement(o.id); toast("اتمسح", "ok"); } catch (err) { toast(errMsg(err), "err"); }
+          } }, "حذف") : null)));
+    });
+  }
+  async function showAcks(o) {
+    const body = h("div", { class: "stack" }, h("div", { class: "muted" }, "بيحمّل..."));
+    openModal("مين استلم الأمر", body);
+    try {
+      const [acks, users] = await Promise.all([S.listAcks(o.id), S.listUsers()]);
+      const got = new Set(acks.map((a) => a.username));
+      const active = users.filter((u) => u.active && u.uid !== o.createdBy && u.username !== (users.find((x) => x.uid === o.createdBy) || {}).username);
+      const missing = active.filter((u) => !got.has(u.username));
+      body.innerHTML = "";
+      body.append(
+        h("div", { class: "stats" }, stat(acks.length, "استلموا"), stat(missing.length, "لسه")),
+        h("h3", null, "✓ استلموا"),
+        acks.length ? h("div", { class: "list" }, acks.map((a) => h("div", { class: "list-item" }, h("div", { class: "grow" }, a.name), h("span", { class: "muted small" }, fmtTime(a.ts) + " " + fmtDate(U.todayStr(new Date(a.ts))))))) : h("div", { class: "empty" }, "لسه محدش"),
+        h("h3", null, "⏳ لسه ماستلموش"),
+        missing.length ? h("div", { class: "list" }, missing.map((u) => h("div", { class: "list-item" }, h("div", { class: "grow" }, u.name), u.phone ? h("a", { class: "btn small", href: "tel:" + u.phone }, "📞") : null))) : h("div", { class: "empty" }, "الكل استلم ✓"));
+    } catch (e) { body.innerHTML = ""; body.appendChild(h("div", { class: "hint err" }, errMsg(e))); }
+  }
+
+  function viewOrders() {
+    const me = S.currentUser();
+    const parts = [pageTitle("الأوامر الإدارية")];
+    if ("Notification" in window && Notification.permission !== "granted") {
+      parts.push(h("div", { class: "card stack" },
+        h("div", null, "🔔 فعّل الإشعارات عشان الأوامر توصلك حتى والتطبيق في الخلفية."),
+        h("button", { class: "btn primary", type: "button", onclick: async () => {
+          try { const r = await Notification.requestPermission(); toast(r === "granted" ? "اتفعلت الإشعارات ✓" : "الإشعارات مقفولة من إعدادات الموبايل", r === "granted" ? "ok" : "err"); } catch (e) {}
+          actx(); viewOrders();
+        } }, "فعّل الإشعارات")));
+    }
+    if (me.role === "master") {
+      const text = h("textarea", { class: "input", rows: 4, required: true, placeholder: "مثال: النهارده عايزين نشد حيلنا شوية، المهام: 1) ... 2) ... 3) ..." });
+      const urgent = h("input", { type: "checkbox" });
+      const speak = h("input", { type: "checkbox", checked: true });
+      const btn = h("button", { class: "btn primary big", type: "submit" }, "📢 ابعت الأمر للكل");
+      parts.push(h("div", { class: "card" }, h("h3", null, "أمر إداري جديد"), h("form", { class: "stack", onsubmit: async (e) => {
+        e.preventDefault();
+        const t = text.value.trim(); if (!t) return;
+        busy(btn, true, "بيبعت...");
+        try { await S.addAnnouncement({ text: t, urgent: urgent.checked, speak: speak.checked }); text.value = ""; urgent.checked = false; toast("اتبعت للكل ✓", "ok"); }
+        catch (err) { toast(errMsg(err), "err"); }
+        busy(btn, false);
+      } }, text,
+        h("label", { class: "check" }, urgent, "🚨 عاجل (صوت إنذار)"),
+        h("label", { class: "check" }, speak, "🔊 الموبايل يقرا الرسالة بصوت عالي"),
+        btn)));
+    }
+    ordersListEl = h("div", { class: "stack" });
+    parts.push(ordersListEl);
+    setView(...parts);
+    drawOrdersList();
+    if (orders.length) setSeen(Math.max(...orders.map((o) => o.ts)));
+    onLeave(() => { ordersListEl = null; });
+  }
+
   /* ================= router ================= */
   function nav() {
     const me = S.currentUser();
@@ -1663,8 +1843,9 @@
     closeModal();
     const me = S.currentUser();
     $("#topbar").hidden = !me; $("#bottomnav").hidden = !me;
-    if (!me) { if (location.hash.startsWith("#/signup")) viewSignup(); else viewLogin(); return; }
+    if (!me) { stopOrders(); if (location.hash.startsWith("#/signup")) viewSignup(); else viewLogin(); return; }
     $("#whoName").textContent = me.name;
+    startOrders();
     nav();
     const parts = location.hash.replace(/^#\/?/, "").split("/");
     const r = parts[0] || "home";
@@ -1673,6 +1854,7 @@
     else if (r === "talk") viewTalkList();
     else if (r === "register" && me.role === "master") viewRegister();
     else if (r === "admin") viewAdmin(parts[1]);
+    else if (r === "orders") viewOrders();
     else viewHome();
   }
 
@@ -1684,7 +1866,7 @@
   S.init();
 
   /* ---------- update check: shows a banner when a newer version is published ---------- */
-  const APP_VERSION = 18;
+  const APP_VERSION = 19;
   async function hardReload() {
     try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map((r) => r.unregister())); } catch (e) {}
     try { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); } catch (e) {}
