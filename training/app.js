@@ -1657,7 +1657,11 @@
   function setSeen(ts) { try { if (ts > getSeen()) localStorage.setItem(seenKey(), String(ts)); } catch (e) {} updateBell(); }
   function getAcked() { try { return new Set(JSON.parse(localStorage.getItem(ackKey()) || "[]")); } catch (e) { return new Set(); } }
   function markAcked(id) { const s = getAcked(); s.add(id); try { localStorage.setItem(ackKey(), JSON.stringify(Array.from(s).slice(-200))); } catch (e) {} }
-  const unread = () => { const me = S.currentUser(); const seen = getSeen(); return orders.filter((o) => o.ts > seen && o.createdBy !== (me && me.uid)); };
+  const sentKey = "hse_orders_sent_here";
+  function sentHere() { try { return new Set(JSON.parse(localStorage.getItem(sentKey) || "[]")); } catch (e) { return new Set(); } }
+  function markSentHere(text, ts) { const s = sentHere(); s.add(text + "|" + Math.floor(ts / 60000)); try { localStorage.setItem(sentKey, JSON.stringify(Array.from(s).slice(-50))); } catch (e) {} }
+  const fromThisDevice = (o) => { const s = sentHere(); const m = Math.floor(o.ts / 60000); return s.has(o.text + "|" + m) || s.has(o.text + "|" + (m - 1)) || s.has(o.text + "|" + (m + 1)); };
+  const unread = () => { const seen = getSeen(); return orders.filter((o) => o.ts > seen && !fromThisDevice(o)); };
   function updateBell() {
     const n = unread().length, el = $("#bellN");
     if (!el) return;
@@ -1674,13 +1678,27 @@
       const before = new Set(orders.map((o) => o.id));
       orders = list;
       const fresh = ordersReady ? list.filter((o) => !before.has(o.id)) : unread();
-      const incoming = fresh.filter((o) => o.createdBy !== me.uid && o.ts > getSeen());
+      const incoming = fresh.filter((o) => !fromThisDevice(o) && o.ts > getSeen());
       ordersReady = true;
       updateBell();
       if (incoming.length) alertOrder(incoming[0], incoming.length);
       if ((location.hash || "").startsWith("#/orders")) drawOrdersList();
     });
   }
+  async function recheckOrders() {
+    if (!ordersUid || !S.fetchAnnouncements) return;
+    try {
+      const list = await S.fetchAnnouncements();
+      const known = new Set(orders.map((o) => o.id));
+      const incoming = list.filter((o) => !known.has(o.id) && !fromThisDevice(o) && o.ts > getSeen());
+      orders = list; updateBell();
+      if (incoming.length) alertOrder(incoming[0], incoming.length);
+      if ((location.hash || "").startsWith("#/orders")) drawOrdersList();
+    } catch (e) {}
+  }
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) recheckOrders(); });
+  window.addEventListener("focus", recheckOrders);
+  window.addEventListener("online", recheckOrders);
   function stopOrders() { if (ordersUnsub) { try { ordersUnsub(); } catch (e) {} } ordersUnsub = null; orders = []; ordersUid = null; updateBell(); }
 
   /* sound: urgent = alarm, normal = chime */
@@ -1751,7 +1769,7 @@
     if (!orders.length) { ordersListEl.appendChild(h("div", { class: "empty" }, "مفيش أوامر لسه")); return; }
     orders.forEach((o) => {
       const mine = o.createdBy === me.uid;
-      const isNew = !mine && o.ts > seen;
+      const isNew = !fromThisDevice(o) && o.ts > seen;
       ordersListEl.appendChild(h("div", { class: "order-item" + (o.urgent ? " urgent" : "") + (isNew ? " new" : "") },
         h("div", { class: "row between" },
           h("span", { class: "pill " + (o.urgent ? "pill-urgent" : "pill-daily") }, o.urgent ? "عاجل" : "أمر إداري"),
@@ -1811,7 +1829,7 @@
         e.preventDefault();
         const t = text.value.trim(); if (!t) return;
         busy(btn, true, "بيبعت...");
-        try { await S.addAnnouncement({ text: t, urgent: urgent.checked, speak: speak.checked }); text.value = ""; urgent.checked = false; toast("اتبعت للكل ✓", "ok"); }
+        try { markSentHere(t, Date.now()); await S.addAnnouncement({ text: t, urgent: urgent.checked, speak: speak.checked }); text.value = ""; urgent.checked = false; toast("اتبعت للكل ✓", "ok"); }
         catch (err) { toast(errMsg(err), "err"); }
         busy(btn, false);
       } }, text,
@@ -1866,7 +1884,7 @@
   S.init();
 
   /* ---------- update check: shows a banner when a newer version is published ---------- */
-  const APP_VERSION = 19;
+  const APP_VERSION = 20;
   async function hardReload() {
     try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map((r) => r.unregister())); } catch (e) {}
     try { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); } catch (e) {}

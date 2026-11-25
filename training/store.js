@@ -532,6 +532,10 @@
       async setSessionCount(id, n) { await db.collection("sessions").doc(id).update({ count: n }); },
 
       /* ---- الأوامر الإدارية ---- */
+      async fetchAnnouncements() {
+        const snap = await db.collection("announcements").orderBy("ts", "desc").limit(30).get({ source: "server" });
+        return docs(snap);
+      },
       watchAnnouncements(cb) {
         return db.collection("announcements").orderBy("ts", "desc").limit(30)
           .onSnapshot((snap) => cb(docs(snap)), (e) => console.warn("announcements", e));
