@@ -309,7 +309,7 @@
    */
   function liveScanner(opts) {
     const cam = cameraView("environment");
-    const guide = h("div", { class: "scan-guide" + (opts.card ? " card" : "") }, h("span", { class: "scan-line" }));
+    const guide = h("div", { class: "scan-guide" + (opts.card ? " is-card" : "") }, h("span", { class: "scan-line" }));
     cam.el.appendChild(guide);
     const status = h("div", { class: "scan-status" }, "بيفتح الكاميرا...");
     const el = h("div", { class: "scanner" }, cam.el, status);
