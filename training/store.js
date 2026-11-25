@@ -71,7 +71,7 @@
     let current = null;
     const listeners = [];
     const emit = () => listeners.forEach((cb) => cb(current));
-    const pub = (u) => u && { uid: u.uid, username: u.username, name: u.name, role: u.role, active: u.active };
+    const pub = (u) => u && { uid: u.uid, username: u.username, name: u.name, role: u.role, active: u.active, owner: u.username === MASTER_USERNAME };
     const vals = (o) => Object.values(o);
     const tick = () => new Promise((r) => setTimeout(r, 30));
 
@@ -106,10 +106,23 @@
         data.users[uid] = { uid, username, password, name, role, active: true, ts: Date.now() };
         save();
       },
-      async setUserActive(uid, active) { await tick(); if (data.users[uid]) { data.users[uid].active = active; save(); } },
+      async setUserActive(uid, active) {
+        await tick();
+        const u = data.users[uid]; if (!u) return;
+        if (u.username === MASTER_USERNAME && !current.owner) throw new Error("محدش يقدر يغيّر حساب صاحب التطبيق");
+        u.active = active; save();
+      },
+      async deleteUser(uid) {
+        await tick();
+        if (!current.owner) throw new Error("حذف الحسابات لصاحب التطبيق بس");
+        const u = data.users[uid]; if (!u) return;
+        if (u.username === MASTER_USERNAME) throw new Error("مينفعش تمسح حساب صاحب التطبيق");
+        delete data.users[uid]; save();
+      },
       async resetPassword(uid, password) {
         await tick();
         if (!data.users[uid]) throw new Error("مش موجود");
+        if (data.users[uid].username === MASTER_USERNAME && !current.owner) throw new Error("محدش يقدر يغيّر حساب صاحب التطبيق");
         if (String(password).length < 6) throw new Error("الباسورد لازم يكون 6 حروف أو أرقام على الأقل");
         data.users[uid].password = password; save();
       },
@@ -254,7 +267,7 @@
               return;
             }
             const u = snap.data();
-            current = { uid: fu.uid, username: u.username, name: u.name, role: u.role, active: u.active };
+            current = { uid: fu.uid, username: u.username, name: u.name, role: u.role, active: u.active, owner: u.username === MASTER_USERNAME };
           } catch (e) {
             console.error(e); current = null;
           }
@@ -285,9 +298,16 @@
         if (username === MASTER_USERNAME) throw new Error("اسم المستخدم ده محجوز");
         const m = await db.collection("logins").doc(username).get();
         if (m.exists) throw new Error("اسم المستخدم ده موجود قبل كده");
-        const uid = await newAuthAccount(usernameToEmail(username), password);
+        let email = usernameToEmail(username), uid;
+        try { uid = await newAuthAccount(email, password); }
+        catch (e) {
+          // اسم مستخدم اتمسح قبل كده: حساب الدخول القديم لسه موجود، فنعمل واحد جديد
+          if (!/موجود قبل كده/.test(e.message)) throw e;
+          email = username + "." + Date.now().toString(36) + "@" + EMAIL_DOMAIN;
+          uid = await newAuthAccount(email, password);
+        }
         await db.collection("users").doc(uid).set({ username, name, role, active: true, ts: Date.now() });
-        await db.collection("logins").doc(username).set({ email: usernameToEmail(username), uid });
+        await db.collection("logins").doc(username).set({ email, uid });
       },
       /* Firebase مبيسمحش للأدمن يغيّر باسورد حد تاني من المتصفح، فبنعمل للأوفيسر
          حساب دخول جديد بنفس اسم المستخدم والصلاحيات، والقديم بيتقفل. */
@@ -297,14 +317,31 @@
         const snap = await ref.get();
         if (!snap.exists) throw new Error("مش موجود");
         const u = snap.data();
-        if (u.username === MASTER_USERNAME) throw new Error("باسورد الأدمن بيتغير من Firebase");
+        if (u.username === MASTER_USERNAME) throw new Error("باسورد صاحب التطبيق بيتغير من Firebase");
         const email = u.username + "." + Date.now().toString(36) + "@" + EMAIL_DOMAIN;
         const newUid = await newAuthAccount(email, password);
         await db.collection("users").doc(newUid).set({ username: u.username, name: u.name, role: u.role, active: u.active !== false, ts: u.ts || Date.now(), previousUid: uid });
         await db.collection("logins").doc(u.username).set({ email, uid: newUid });
         await ref.update({ active: false, replacedBy: newUid });
       },
-      async setUserActive(uid, active) { await db.collection("users").doc(uid).update({ active }); },
+      async setUserActive(uid, active) {
+        const snap = await db.collection("users").doc(uid).get();
+        if (snap.exists && snap.data().username === MASTER_USERNAME && !current.owner) throw new Error("محدش يقدر يغيّر حساب صاحب التطبيق");
+        await db.collection("users").doc(uid).update({ active });
+      },
+      /* بيمسح الحساب من التطبيق: صاحبه مش هيقدر يدخل تاني، وسجل المحاضرات اللي عملها بيفضل زي ما هو */
+      async deleteUser(uid) {
+        if (!current.owner) throw new Error("حذف الحسابات لصاحب التطبيق بس");
+        const snap = await db.collection("users").doc(uid).get();
+        if (!snap.exists) return;
+        const u = snap.data();
+        if (u.username === MASTER_USERNAME) throw new Error("مينفعش تمسح حساب صاحب التطبيق");
+        const all = await db.collection("users").where("username", "==", u.username).get();
+        const batch = db.batch();
+        all.docs.forEach((d) => batch.delete(d.ref));
+        batch.delete(db.collection("logins").doc(u.username));
+        try { await batch.commit(); } catch (e) { throw authError(e); }
+      },
 
       async getWorker(nid) {
         const s = await db.collection("workers").doc(nid).get();

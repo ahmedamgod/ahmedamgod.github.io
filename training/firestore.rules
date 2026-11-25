@@ -10,6 +10,8 @@ service cloud.firestore {
         && profile().active == true;
     }
     function master() { return active() && profile().role == 'master'; }
+    // صاحب التطبيق = حساب admin
+    function owner() { return active() && request.auth.token.email == 'admin@hse.example.com'; }
 
     match /users/{uid} {
       allow read: if active() || (signedIn() && request.auth.uid == uid);
@@ -19,13 +21,15 @@ service cloud.firestore {
         && request.auth.token.email == 'admin@hse.example.com'
         && request.resource.data.role == 'master'
         && request.resource.data.active == true);
-      allow update, delete: if master();
+      allow update: if owner() || (master() && resource.data.username != 'admin');
+      allow delete: if owner() && resource.data.username != 'admin';
     }
     // اسم المستخدم ← حساب الدخول (للباسورد الجديد)
     match /logins/{username} {
       allow get: if true;
       allow list: if false;
-      allow write: if master();
+      allow create, update: if master() && username != 'admin';
+      allow delete: if owner();
     }
     // تسجيل العمال والاندكشن من الأدمن بس
     match /workers/{id} {

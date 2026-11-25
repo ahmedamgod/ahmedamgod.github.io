@@ -1230,12 +1230,20 @@
         const users = await S.listUsers();
         list.innerHTML = ""; list.appendChild(h("h3", null, "الحسابات (" + users.length + ")"));
         users.forEach((u) => list.appendChild(h("div", { class: "list-item" + (u.active ? "" : " off") },
-          h("div", { class: "grow" }, h("div", { class: "strong" }, u.name), h("div", { class: "muted small", dir: "ltr" }, u.username + " · " + (u.role === "master" ? "master" : "officer"))),
-          u.uid === me.uid ? h("span", { class: "muted small" }, "أنت") : h("div", { class: "row" },
-            h("button", { class: "btn small", type: "button", onclick: () => resetPasswordDialog(u, draw) }, "باسورد جديد"),
-            h("button", { class: "btn small " + (u.active ? "danger" : ""), type: "button", onclick: async () => {
-              try { await S.setUserActive(u.uid, !u.active); draw(); } catch (e) { toast(errMsg(e), "err"); }
-            } }, u.active ? "إيقاف" : "تفعيل")))));
+          h("div", { class: "grow" },
+            h("div", { class: "strong" }, u.name, u.username === "admin" ? h("span", { class: "pill pill-ind", style: "margin-inline-start:6px" }, "صاحب التطبيق") : null),
+            h("div", { class: "muted small", dir: "ltr" }, u.username + " · " + (u.role === "master" ? "master" : "officer"))),
+          u.uid === me.uid ? h("span", { class: "muted small" }, "أنت")
+            : (u.username === "admin" && !me.owner) ? h("span", { class: "muted small" }, "🔒")
+            : h("div", { class: "row wrap" },
+              h("button", { class: "btn small", type: "button", onclick: () => resetPasswordDialog(u, draw) }, "باسورد جديد"),
+              h("button", { class: "btn small", type: "button", onclick: async () => {
+                try { await S.setUserActive(u.uid, !u.active); draw(); } catch (e) { toast(errMsg(e), "err"); }
+              } }, u.active ? "إيقاف" : "تفعيل"),
+              me.owner ? h("button", { class: "btn small danger", type: "button", onclick: async () => {
+                if (!confirm("متأكد إنك عايز تمسح حساب " + u.name + " (" + u.username + ")؟\nمش هيقدر يدخل التطبيق تاني. سجل المحاضرات اللي عملها هيفضل موجود.")) return;
+                try { await S.deleteUser(u.uid); toast("اتمسح الحساب", "ok"); draw(); } catch (e) { toast(errMsg(e), "err"); }
+              } }, "حذف") : null))));
       } catch (e) { list.innerHTML = ""; list.appendChild(h("div", { class: "hint err" }, errMsg(e))); }
     }
     body.append(h("div", { class: "card" }, h("h3", null, "إضافة أوفيسر"), form), list);
@@ -1486,7 +1494,7 @@
   S.init();
 
   /* ---------- update check: shows a banner when a newer version is published ---------- */
-  const APP_VERSION = 12;
+  const APP_VERSION = 13;
   async function hardReload() {
     try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map((r) => r.unregister())); } catch (e) {}
     try { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); } catch (e) {}
