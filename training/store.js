@@ -164,6 +164,7 @@
         data.workers[nid] = out; save(); return out;
       },
       async deleteWorker(nid) { await tick(); delete data.workers[nid]; delete data.faces[nid]; save(); },
+      async deleteWorkers(nids) { await tick(); nids.forEach((n) => { delete data.workers[n]; delete data.faces[n]; }); save(); },
       async searchWorkers(q) { await tick(); return vals(data.workers).filter((w) => matchesName(w, q)).slice(0, 30); },
       async listAllWorkers() { await tick(); return vals(data.workers).sort(byTsDesc); },
       async existingIds(ids) { await tick(); return new Set(ids.filter((id) => data.workers[id])); },
@@ -420,6 +421,13 @@
         const s = await ref.get(); if (!s.exists) throw new Error("مش موجود");
         const out = prepareWorker(Object.assign({}, s.data(), patch));
         await ref.set(out); return out;
+      },
+      async deleteWorkers(nids) {
+        for (let i = 0; i < nids.length; i += 200) {
+          const batch = db.batch();
+          nids.slice(i, i + 200).forEach((n) => { batch.delete(db.collection("workers").doc(n)); batch.delete(db.collection("faces").doc(n)); });
+          await batch.commit();
+        }
       },
       async deleteWorker(nid) {
         await db.collection("workers").doc(nid).delete();

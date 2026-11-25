@@ -1220,7 +1220,7 @@
     const me = S.currentUser();
     if (me.role !== "master") { location.hash = "#/home"; return; }
     tab = tab || "reports";
-    const tabs = h("div", { class: "seg" },
+    const tabs = h("div", { class: "seg tabs-grid" },
       [["reports", "التقارير"], ["officers", "الأوفيسرز"], ["workers", "العمال"], ["import", "استيراد إكسل"]].map(([k, l]) =>
         h("a", { class: "seg-btn" + (k === tab ? " on" : ""), href: "#/admin/" + k }, l)));
     const body = h("div");
@@ -1514,12 +1514,51 @@
     catch (e) { box.innerHTML = ""; box.appendChild(h("div", { class: "hint err" }, errMsg(e))); return; }
     companiesCache = Array.from(new Set(workers.map((w) => w.company).filter(Boolean)));
     const talkedToday = new Set(todayAtt.filter((a) => a.type === "daily").map((a) => a.nid));
-    const q = h("input", { class: "input", placeholder: "فلترة بالاسم أو الرقم أو الشركة" });
+    const q = h("input", { class: "input", placeholder: "دوّر بالاسم أو الرقم أو الشركة" });
     const onlyMissing = h("input", { type: "checkbox" });
     const company = h("select", { class: "input" }, h("option", { value: "" }, "كل الشركات"), companiesCache.map((c) => h("option", { value: c }, c)));
     const table = h("div", { class: "list" });
     const countEl = h("div", { class: "muted small" });
     let filtered = [];
+    let selecting = false;
+    const selected = new Set();
+
+    const selCount = h("span", { class: "strong" });
+    const selBar = h("div", { class: "sel-bar", hidden: true },
+      h("div", { class: "row between" }, selCount,
+        h("button", { class: "btn small", type: "button", onclick: () => setSelecting(false) }, "إلغاء")),
+      h("div", { class: "action-grid" },
+        h("button", { class: "btn small", type: "button", onclick: () => {
+          const all = filtered.length && filtered.every((w) => selected.has(w.nid));
+          filtered.forEach((w) => (all ? selected.delete(w.nid) : selected.add(w.nid)));
+          draw();
+        } }, "تحديد الكل / إلغاء"),
+        h("button", { class: "btn small", type: "button", onclick: () => {
+          const list = workers.filter((w) => selected.has(w.nid));
+          if (!list.length) { toast("محددتش حد", "err"); return; }
+          printCards(list);
+        } }, icon("print"), "طباعة كروت"),
+        h("button", { class: "btn small danger span2", type: "button", onclick: async (e) => {
+          const list = workers.filter((w) => selected.has(w.nid));
+          if (!list.length) { toast("محددتش حد", "err"); return; }
+          if (!confirm("هتمسح " + list.length + " عامل من التطبيق. سجل المحاضرات القديم هيفضل موجود. متأكد؟")) return;
+          const btn = e.currentTarget; busy(btn, true, "بيمسح...");
+          try {
+            await S.deleteWorkers(list.map((w) => w.nid));
+            const gone = new Set(list.map((w) => w.nid));
+            workers = workers.filter((w) => !gone.has(w.nid));
+            facesCache = null; toast("اتمسح " + list.length + " عامل", "ok");
+            setSelecting(false);
+          } catch (err) { toast(errMsg(err), "err"); }
+          busy(btn, false);
+        } }, "🗑 حذف المحددين")));
+
+    function setSelecting(on) {
+      selecting = on; selected.clear();
+      selBar.hidden = !on; tools.hidden = on;
+      draw();
+    }
+
     function draw() {
       const qq = U.normalizeArabic(q.value);
       filtered = workers.filter((w) =>
@@ -1527,32 +1566,46 @@
         (!company.value || w.company === company.value) &&
         (!onlyMissing.checked || !talkedToday.has(w.nid)));
       countEl.textContent = filtered.length + " من " + workers.length + " عامل · " + talkedToday.size + " أخدوا محاضرة النهارده";
+      selCount.textContent = "محدد: " + selected.size;
       table.innerHTML = "";
-      filtered.slice(0, 300).forEach((w) => table.appendChild(h("button", { type: "button", class: "list-item", onclick: () => openModal(w.name, workerPanel(w)) },
-        avatar(w, 40),
-        h("div", { class: "grow" }, h("div", { class: "strong" }, w.name), h("div", { class: "muted small" }, [displayId(w.nid), w.company, w.inductionDate ? "اندكشن " + fmtDate(w.inductionDate) : "بدون اندكشن"].filter(Boolean).join(" · "))),
-        h("span", { class: "dot " + (talkedToday.has(w.nid) ? "ok" : "bad"), title: talkedToday.has(w.nid) ? "أخد محاضرة النهارده" : "ماخدش محاضرة النهارده" })
-      )));
-      if (filtered.length > 300) table.appendChild(h("div", { class: "muted small center" }, "بيعرض أول 300، استخدم الفلترة"));
+      filtered.slice(0, 300).forEach((w) => {
+        const on = selected.has(w.nid);
+        table.appendChild(h("button", { type: "button", class: "list-item" + (on ? " selected" : ""), onclick: () => {
+          if (!selecting) { openModal(w.name, workerPanel(w, { onChanged: () => {} })); return; }
+          if (selected.has(w.nid)) selected.delete(w.nid); else selected.add(w.nid);
+          draw();
+        } },
+          selecting ? h("span", { class: "tick" + (on ? " on" : "") }, on ? "✓" : "") : avatar(w, 40),
+          h("div", { class: "grow" }, h("div", { class: "strong" }, w.name),
+            h("div", { class: "muted small" }, displayId(w.nid)),
+            h("div", { class: "muted small" }, [w.company, w.inductionDate ? "اندكشن " + fmtDate(w.inductionDate) : "بدون اندكشن"].filter(Boolean).join(" · "))),
+          h("span", { class: "dot " + (talkedToday.has(w.nid) ? "ok" : "bad"), title: talkedToday.has(w.nid) ? "أخد محاضرة النهارده" : "ماخدش محاضرة النهارده" })
+        ));
+      });
+      if (filtered.length > 300) table.appendChild(h("div", { class: "muted small center" }, "بيعرض أول 300، استخدم البحث"));
     }
     [q, company].forEach((el) => el.addEventListener("input", draw));
     onlyMissing.addEventListener("change", draw);
+
+    const tools = h("div", { class: "action-grid" },
+      h("a", { class: "btn small primary", href: "#/admin/import" }, "⬆ استيراد من إكسل"),
+      h("button", { class: "btn small", type: "button", onclick: () => exportXlsx("workers-" + today() + ".xlsx", [["العمال", filtered.map((w) => ({
+        "الاسم": w.name, "رقم الهوية": w.nid, "الشركة": w.company || "", "الوظيفة": w.job || "", "التليفون": w.phone || "",
+        "العنوان": w.address || "", "تاريخ الميلاد": w.birthDate || "", "النوع": w.gender || "", "المحافظة": w.governorate || "",
+        "تاريخ الاندكشن": w.inductionDate || "", "محاضرة النهارده": talkedToday.has(w.nid) ? "نعم" : "لا", "الكود": w.code
+      }))]]) }, "⬇ تنزيل إكسل"),
+      h("button", { class: "btn small", type: "button", onclick: () => {
+        if (!filtered.length) return;
+        if (filtered.length > 60 && !confirm("هتطبع " + filtered.length + " كارت. تكمل؟")) return;
+        printCards(filtered);
+      } }, icon("print"), "طباعة الكل"),
+      h("button", { class: "btn small", type: "button", onclick: () => setSelecting(true) }, "☑ تحديد"));
+
     box.innerHTML = "";
     box.append(
-      h("div", { class: "stack" }, q, h("div", { class: "row wrap" }, company, h("label", { class: "check small" }, onlyMissing, "اللي ماخدوش محاضرة النهارده بس"))),
-      h("div", { class: "row wrap between" }, countEl, h("div", { class: "row wrap" },
-        h("a", { class: "btn small primary", href: "#/admin/import" }, "⬆ استيراد من إكسل"),
-        h("button", { class: "btn small", type: "button", onclick: () => exportXlsx("workers-" + today() + ".xlsx", [["العمال", filtered.map((w) => ({
-          "الاسم": w.name, "رقم الهوية": w.nid, "الشركة": w.company || "", "الوظيفة": w.job || "", "التليفون": w.phone || "",
-          "العنوان": w.address || "", "تاريخ الميلاد": w.birthDate || "", "النوع": w.gender || "", "المحافظة": w.governorate || "",
-          "تاريخ الاندكشن": w.inductionDate || "", "محاضرة النهارده": talkedToday.has(w.nid) ? "نعم" : "لا", "الكود": w.code
-        }))]]) }, "إكسل"),
-        h("button", { class: "btn small", type: "button", onclick: () => {
-          if (!filtered.length) return;
-          if (filtered.length > 60 && !confirm("هتطبع " + filtered.length + " كارت. تكمل؟")) return;
-          printCards(filtered);
-        } }, icon("print"), "طباعة كروت"))),
-      table);
+      h("div", { class: "stack" }, q, company, h("label", { class: "check small" }, onlyMissing, "اللي ماخدوش محاضرة النهارده بس"), countEl, tools),
+      selBar);
+    body.appendChild(h("div", { class: "card" }, table));
     draw();
   }
 
@@ -1593,7 +1646,7 @@
   S.init();
 
   /* ---------- update check: shows a banner when a newer version is published ---------- */
-  const APP_VERSION = 16;
+  const APP_VERSION = 17;
   async function hardReload() {
     try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map((r) => r.unregister())); } catch (e) {}
     try { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); } catch (e) {}

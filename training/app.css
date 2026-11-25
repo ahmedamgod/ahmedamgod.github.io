@@ -307,3 +307,17 @@ input, textarea, select, [contenteditable] { -webkit-user-select: text; user-sel
 
 .undo-bar { position: fixed; inset-inline: 16px; bottom: calc(88px + env(safe-area-inset-bottom)); z-index: 65; max-width: 520px; margin: 0 auto; display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 16px; border-radius: 12px; background: var(--navy); color: #fff; font-weight: 700; box-shadow: 0 6px 20px rgba(0,0,0,.3); }
 .undo-bar button { background: var(--orange); color: #1b1200; border: 0; border-radius: 8px; padding: 8px 16px; font-weight: 800; cursor: pointer; }
+
+/* ---------- admin layout ---------- */
+.seg.tabs-grid { display: grid; grid-template-columns: repeat(4, 1fr); overflow: visible; }
+.seg.tabs-grid .seg-btn { justify-content: center; white-space: normal; text-align: center; padding: 8px 6px; min-height: 44px; }
+@media (max-width: 520px) { .seg.tabs-grid { grid-template-columns: repeat(2, 1fr); } }
+.action-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.action-grid .btn { width: 100%; }
+.action-grid .span2 { grid-column: 1 / -1; }
+.sel-bar { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; padding: 12px; border: 2px solid var(--orange); border-radius: 12px; }
+.list-item.selected { border-color: var(--orange); background: color-mix(in srgb, var(--orange) 12%, var(--card)); }
+.tick { width: 28px; height: 28px; border-radius: 8px; border: 2px solid var(--border); display: grid; place-items: center; flex: none; font-weight: 800; }
+.tick.on { background: var(--orange); border-color: var(--orange); color: #1b1200; }
+select.input { text-overflow: ellipsis; }
+.page-title h1 { padding-inline-end: 40px; }
