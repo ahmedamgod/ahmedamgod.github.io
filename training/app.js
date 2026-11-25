@@ -168,7 +168,13 @@
     if (on) { btn.dataset.label = btn.textContent; btn.disabled = true; btn.textContent = label || "استنى..."; }
     else { btn.disabled = false; if (btn.dataset.label) btn.textContent = btn.dataset.label; }
   }
-  const errMsg = (e) => (e && e.message) || "حصل خطأ";
+  const errMsg = (e) => {
+    const m = (e && e.message) || "";
+    const c = (e && e.code) || "";
+    if (/insufficient permissions|permission-denied/i.test(m + c)) return "مالكش صلاحية تعمل كده";
+    if (/network|offline|unavailable/i.test(m + c)) return "مفيش إنترنت، جرّب تاني";
+    return m || "حصل خطأ";
+  };
 
   /* ================= cleanup on route change ================= */
   let cleanups = [];
@@ -1587,7 +1593,7 @@
   S.init();
 
   /* ---------- update check: shows a banner when a newer version is published ---------- */
-  const APP_VERSION = 15;
+  const APP_VERSION = 16;
   async function hardReload() {
     try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map((r) => r.unregister())); } catch (e) {}
     try { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); } catch (e) {}

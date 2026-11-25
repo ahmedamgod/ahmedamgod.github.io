@@ -56,7 +56,8 @@ service cloud.firestore {
       allow read: if active();
       allow create: if active() && request.resource.data.officerUid == request.auth.uid
         && (request.resource.data.type == 'daily' || master());
-      allow delete: if master() || (active() && resource.data.officerUid == request.auth.uid);
+      allow delete: if master() || (active() && (resource.data.officerUid == request.auth.uid
+        || resource.data.get('officerUsername', '') == profile().username));
       allow update: if master();
     }
   }
