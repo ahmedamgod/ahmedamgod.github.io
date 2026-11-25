@@ -1,6 +1,6 @@
 // Network-first: always tries the latest version, falls back to cache when offline.
-const CACHE = "hse-training-v3";
-const SHELL = ["./", "index.html", "app.css", "app.js", "store.js", "config.js", "icon.svg"];
+const CACHE = "hse-training-v4";
+const SHELL = ["./", "index.html", "app.css", "app.js", "store.js", "idocr.js", "config.js", "icon.svg"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener("fetch", (e) => {

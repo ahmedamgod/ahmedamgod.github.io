@@ -6,10 +6,9 @@
   const CFG = window.HSE_CONFIG || {};
 
   const LIBS = {
-    qr: "https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js",
+    jsqr: "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js",
     face: "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js",
     faceModels: "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model/",
-    ocr: "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js",
     xlsx: "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"
   };
 
@@ -267,52 +266,7 @@
     });
   }
 
-  /* ================= OCR (ID card) ================= */
-  async function imageToCanvas(file, maxW = 1800) {
-    const url = URL.createObjectURL(file);
-    try {
-      const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
-      const scale = Math.min(1, maxW / img.width);
-      const c = document.createElement("canvas");
-      c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
-      const ctx = c.getContext("2d");
-      ctx.filter = "grayscale(1) contrast(1.4)";
-      ctx.drawImage(img, 0, 0, c.width, c.height);
-      return c;
-    } finally { URL.revokeObjectURL(url); }
-  }
-  async function ocrNationalId(file, onProgress) {
-    await loadScript(LIBS.ocr);
-    const canvas = await imageToCanvas(file);
-    const r = await Tesseract.recognize(canvas, "ara+eng", {
-      logger: (m) => { if (m.status === "recognizing text" && onProgress) onProgress(Math.round(m.progress * 100)); }
-    });
-    const text = toWesternDigits(r.data.text);
-    const cands = new Set();
-    text.split(/\n/).forEach((line) => { const dg = line.replace(/[^\d]/g, ""); (dg.match(/\d{14}/g) || []).forEach((x) => cands.add(x)); for (let i = 0; i + 14 <= dg.length; i++) cands.add(dg.slice(i, i + 14)); });
-    const all = text.replace(/[^\d]/g, "");
-    for (let i = 0; i + 14 <= all.length; i++) cands.add(all.slice(i, i + 14));
-    const list = Array.from(cands);
-    return list.find((c) => parseNid(c)) || null;
-  }
-  function cardPhotoButton(onNid, label = "صوّر البطاقة") {
-    const input = h("input", { type: "file", accept: "image/*", capture: "environment", hidden: true });
-    const btn = h("button", { class: "btn", type: "button", onclick: () => input.click() }, icon("camera"), label);
-    input.addEventListener("change", async () => {
-      const f = input.files && input.files[0]; input.value = "";
-      if (!f) return;
-      busy(btn, true, "بيقرا البطاقة...");
-      try {
-        const nid = await ocrNationalId(f, (p) => (btn.textContent = "بيقرا البطاقة " + p + "%"));
-        if (nid) { toast("لقيت الرقم، راجعه قبل ما تكمل", "ok"); onNid(nid); }
-        else toast("مقدرتش أقرا الرقم، صوّر وش البطاقة تاني بوضوح أو اكتبه بإيدك", "err");
-      } catch (e) { toast(errMsg(e), "err"); }
-      busy(btn, false);
-    });
-    return h("span", null, btn, input);
-  }
-
-  /* ================= QR ================= */
+  /* ================= live scanner (QR + ID card) ================= */
   const QR_PREFIX = "HSEW:";
   function qrSvg(text, cell = 5) {
     const q = qrcode(0, "M"); q.addData(text); q.make();
@@ -325,84 +279,166 @@
     if (digits.length === 14) return S.getWorker(digits);
     return null;
   }
-  async function startQrScanner(holder, onText) {
-    await loadScript(LIBS.qr);
-    const id = "qr_" + Math.random().toString(36).slice(2);
-    const box = h("div", { id, class: "qr-box" });
-    holder.innerHTML = ""; holder.appendChild(box);
-    const q = new Html5Qrcode(id, { verbose: false });
-    await q.start({ facingMode: "environment" }, {
-      fps: 10, qrbox: (w, hgt) => { const m = Math.floor(Math.min(w, hgt) * 0.7); return { width: m, height: m }; }
-    }, onText, () => {});
-    let stopped = false;
-    return async () => { if (stopped) return; stopped = true; try { await q.stop(); q.clear(); } catch (e) {} holder.innerHTML = ""; };
+
+  let qrDecoder;
+  async function getQrDecoder() {
+    if (qrDecoder) return qrDecoder;
+    try {
+      if ("BarcodeDetector" in window) {
+        const formats = await BarcodeDetector.getSupportedFormats();
+        if (formats.includes("qr_code")) {
+          const bd = new BarcodeDetector({ formats: ["qr_code"] });
+          qrDecoder = async (c) => { const r = await bd.detect(c); return r[0] ? r[0].rawValue : null; };
+          return qrDecoder;
+        }
+      }
+    } catch (e) {}
+    await loadScript(LIBS.jsqr);
+    qrDecoder = async (c) => {
+      const d = c.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, c.width, c.height);
+      const r = jsQR(d.data, d.width, d.height, { inversionAttempts: "attemptBoth" });
+      return r ? r.data : null;
+    };
+    return qrDecoder;
+  }
+  const nidCheck = (n) => !!parseNid(n);
+
+  /**
+   * Live camera that reads QR cards and the national ID number on its own.
+   * opts: { qr, card, hint, onQr(text), onNid(nid) }
+   */
+  function liveScanner(opts) {
+    const cam = cameraView("environment");
+    const guide = h("div", { class: "scan-guide" + (opts.card ? " card" : "") }, h("span", { class: "scan-line" }));
+    cam.el.appendChild(guide);
+    const status = h("div", { class: "scan-status" }, "بيفتح الكاميرا...");
+    const el = h("div", { class: "scanner" }, cam.el, status);
+    let running = false, pausedUntil = 0, timer = null, lastOcr = 0;
+    let lastVal = "", lastValT = 0;
+    const fresh = (v) => { const now = Date.now(); if (v === lastVal && now - lastValT < 10000) { lastValT = now; return false; } lastVal = v; lastValT = now; return true; };
+    const hist = [];
+    const small = document.createElement("canvas");
+    const setStatus = (t, k) => { status.textContent = t; status.className = "scan-status " + (k || ""); };
+
+    function cropGuide(v) {
+      const vw = v.videoWidth, vh = v.videoHeight, boxAR = 4 / 3;
+      let sx = 0, sy = 0, sw = vw, sh = vh;               // visible part (object-fit: cover)
+      if (vw / vh > boxAR) { sw = vh * boxAR; sx = (vw - sw) / 2; } else { sh = vw / boxAR; sy = (vh - sh) / 2; }
+      const gw = sw * 0.92, gh = Math.min(sh * 0.9, gw / 1.586);
+      const c = document.createElement("canvas");
+      c.width = Math.round(gw); c.height = Math.round(gh);
+      c.getContext("2d").drawImage(v, sx + (sw - gw) / 2, sy + (sh - gh) / 2, gw, gh, 0, 0, c.width, c.height);
+      return c;
+    }
+
+    async function tick() {
+      if (!running) return;
+      const v = cam.video;
+      if (v.readyState >= 2 && v.videoWidth && Date.now() > pausedUntil) {
+        try {
+          if (opts.qr) {
+            const sc = Math.min(1, 800 / Math.max(v.videoWidth, v.videoHeight));
+            small.width = Math.round(v.videoWidth * sc); small.height = Math.round(v.videoHeight * sc);
+            small.getContext("2d", { willReadFrequently: true }).drawImage(v, 0, 0, small.width, small.height);
+            const txt = await (await getQrDecoder())(small);
+            if (txt && running && fresh(txt)) { pausedUntil = Date.now() + 2000; setStatus("✓ اتقرا الكود", "ok"); opts.onQr(txt); }
+          }
+          if (opts.card && running && Date.now() > pausedUntil && Date.now() - lastOcr > 500 && window.IDOCR) {
+            lastOcr = Date.now();
+            const nid = IDOCR.read(cropGuide(v), { check: nidCheck });
+            if (nid) {
+              hist.push(nid); if (hist.length > 6) hist.shift();
+              if (hist.filter((x) => x === nid).length >= 2 && fresh(nid)) {
+                hist.length = 0; pausedUntil = Date.now() + 3000;
+                beep(true); setStatus("✓ الرقم القومي: " + nid, "ok"); opts.onNid(nid);
+              } else setStatus("لقيت رقم، ثبّت الكاميرا ثانية...", "");
+            }
+          }
+        } catch (e) { console.warn(e); }
+      }
+      if (running) timer = setTimeout(tick, 150);
+    }
+    return {
+      el,
+      async start() {
+        try {
+          await cam.start(); running = true; setStatus(opts.hint || "وجّه الكاميرا");
+          if (opts.qr) getQrDecoder().catch((e) => setStatus(errMsg(e), "err"));
+          if (opts.card && window.IDOCR) setTimeout(() => IDOCR.warmup(), 50);
+          tick();
+        } catch (e) { setStatus(errMsg(e), "err"); }
+      },
+      stop() { running = false; clearTimeout(timer); cam.stop(); },
+      setStatus
+    };
+  }
+
+  /** button that opens the live camera to read the ID number into a field */
+  function cardPhotoButton(onNid, label = "صوّر البطاقة") {
+    return h("button", { class: "btn", type: "button", onclick: () => {
+      const sc = liveScanner({ card: true, hint: "حط وش البطاقة جوه الإطار وثبّت الموبايل", onNid: (nid) => { sc.stop(); closeModal(); toast("الرقم القومي: " + nid + " (راجعه)", "ok"); onNid(nid); } });
+      openModal("قراءة البطاقة", h("div", { class: "stack" }, sc.el,
+        h("p", { class: "muted small" }, "التطبيق بيقرا الرقم القومي لوحده. نوّر كويس وخلّي البطاقة مالية الإطار ومن غير لمعة.")), () => sc.stop());
+      sc.start();
+    } }, icon("camera"), label);
   }
 
   /* ================= identify widget ================= */
   /**
    * opts.onWorker(worker) — worker found
    * opts.onMissing(idOrNull) — not registered
-   * opts.continuous — keep QR camera open after each scan
+   * opts.continuous — keep the camera open after each read
    */
   function identifier(opts) {
-    const methods = [
-      ["qr", "QR", "qr"], ["nid", "الرقم القومي", "id"], ["card", "صورة البطاقة", "camera"],
-      ["name", "الاسم", "name"], ["face", "الوش", "face"]
-    ];
+    const methods = [["scan", "الكاميرا", "qr"], ["nid", "الرقم القومي", "id"], ["name", "الاسم", "name"], ["face", "الوش", "face"]];
     let current = null;
-    let stopQr = null;
+    let stopCurrent = null;
     const area = h("div", { class: "id-area" });
     const tabs = h("div", { class: "seg", role: "tablist" });
     methods.forEach(([k, label, ic]) => {
       tabs.appendChild(h("button", { type: "button", class: "seg-btn", "data-k": k, onclick: () => select(k) }, icon(ic), h("span", null, label)));
     });
-
-    async function stopScanner() { if (stopQr) { const f = stopQr; stopQr = null; await f(); } }
-    async function found(w, fallbackId) {
-      if (w) opts.onWorker(w); else opts.onMissing(fallbackId || null);
-    }
+    function stopAll() { if (stopCurrent) { const f = stopCurrent; stopCurrent = null; f(); } }
     async function lookupId(id) {
       if (!id) return;
-      try { found(await S.getWorker(id), id); } catch (e) { toast(errMsg(e), "err"); }
+      try { const w = await S.getWorker(id); if (w) opts.onWorker(w); else opts.onMissing(id); } catch (e) { toast(errMsg(e), "err"); }
     }
 
     function select(k) {
-      stopScanner();
+      stopAll();
       current = k;
       tabs.querySelectorAll(".seg-btn").forEach((b) => b.classList.toggle("on", b.dataset.k === k));
       area.innerHTML = "";
-      try { localStorage.setItem("hse_id_method", k); } catch (e) {}
+      try { localStorage.setItem("hse_id_method2", k); } catch (e) {}
 
-      if (k === "qr") {
-        const holder = h("div", { class: "qr-holder" });
-        const startBtn = h("button", { class: "btn primary big", type: "button" }, icon("qr"), "افتح الكاميرا وامسح الكارت");
-        const stopBtn = h("button", { class: "btn", type: "button", hidden: true }, "اقفل الكاميرا");
-        let last = "", lastT = 0, handling = false;
-        startBtn.addEventListener("click", async () => {
-          busy(startBtn, true, "بيفتح الكاميرا...");
-          try {
-            stopQr = await startQrScanner(holder, async (text) => {
-              const now = Date.now();
-              if (handling || (text === last && now - lastT < 4000)) return;
-              last = text; lastT = now; handling = true;
+      if (k === "scan") {
+        const holder = h("div");
+        const again = h("button", { class: "btn primary big", type: "button", hidden: true, onclick: () => startScan() }, icon("qr"), "امسح تاني");
+        let sc = null;
+        const finish = () => { if (!opts.continuous && sc) { sc.stop(); sc = null; holder.innerHTML = ""; again.hidden = false; } };
+        function startScan() {
+          again.hidden = true; holder.innerHTML = "";
+          sc = liveScanner({
+            qr: true, card: true,
+            hint: "وجّه الكاميرا على كارت الـ QR أو وش البطاقة",
+            onQr: async (t) => {
               try {
-                const w = await workerFromQr(text);
-                if (!opts.continuous) await stopScanner();
-                if (w) { beep(true); opts.onWorker(w); } else { beep(false); toast("الكود ده مش متسجل", "err"); if (!opts.continuous) select("qr"); }
+                const w = await workerFromQr(t);
+                if (w) { beep(true); finish(); opts.onWorker(w); } else { beep(false); toast("الكود ده مش متسجل", "err"); }
               } catch (e) { toast(errMsg(e), "err"); }
-              handling = false;
-              if (!opts.continuous) { startBtn.hidden = false; stopBtn.hidden = true; }
-            });
-            startBtn.hidden = true; stopBtn.hidden = false;
-          } catch (e) { toast(errMsg(e), "err"); }
-          busy(startBtn, false);
-        });
-        stopBtn.addEventListener("click", async () => { await stopScanner(); startBtn.hidden = false; stopBtn.hidden = true; });
-        area.append(holder, h("div", { class: "row" }, startBtn, stopBtn),
-          opts.continuous ? h("p", { class: "muted small" }, "الكاميرا هتفضل مفتوحة: امسح كارت ورا كارت وكل واحد هيتسجل لوحده.") : null);
+            },
+            onNid: async (nid) => { finish(); await lookupId(nid); }
+          });
+          holder.appendChild(sc.el); sc.start();
+          stopCurrent = () => { if (sc) sc.stop(); };
+        }
+        area.append(holder, again, h("p", { class: "muted small" }, opts.continuous
+          ? "الكاميرا بتفضل مفتوحة: امسح كارت ورا كارت أو بطاقة ورا بطاقة، وكل واحد بيتسجل لوحده."
+          : "مش محتاج تدوس حاجة، أول ما الكاميرا تشوف الـ QR أو الرقم القومي بتقراه."));
+        startScan();
       }
 
-      if (k === "nid" || k === "card") {
+      if (k === "nid") {
         let foreign = false;
         const input = h("input", { class: "input big-input", inputmode: "numeric", autocomplete: "off", placeholder: "اكتب الرقم القومي (14 رقم)", maxlength: 20 });
         const info = h("div", { class: "hint" });
@@ -422,12 +458,14 @@
           info.className = "hint " + (p ? "ok" : "err");
         }
         input.addEventListener("input", upd);
-        const form = h("form", { class: "stack", onsubmit: (e) => { e.preventDefault(); const id = normalizeId(input.value, foreign); if (!foreign && id.length !== 14) { toast("الرقم القومي لازم يكون 14 رقم", "err"); return; } lookupId(id).then(() => { if (opts.continuous) { input.value = ""; upd(); input.focus(); } }); } },
-          k === "card" ? h("div", null, cardPhotoButton((nid) => { input.value = nid; upd(); lookupId(nid); }, "صوّر وش البطاقة"),
-            h("p", { class: "muted small" }, "صوّر البطاقة من قريب في نور كويس. التطبيق هيقرا الرقم القومي، وأنت راجعه.")) : null,
-          h("div", { class: "row" }, input, go), info, fToggle);
+        const form = h("form", { class: "stack", onsubmit: (e) => {
+          e.preventDefault();
+          const id = normalizeId(input.value, foreign);
+          if (!foreign && id.length !== 14) { toast("الرقم القومي لازم يكون 14 رقم", "err"); return; }
+          lookupId(id).then(() => { if (opts.continuous) { input.value = ""; upd(); input.focus(); } });
+        } }, h("div", { class: "row" }, input, go), info, fToggle);
         area.appendChild(form);
-        setTimeout(() => k === "nid" && input.focus(), 50);
+        setTimeout(() => input.focus(), 50);
       }
 
       if (k === "name") {
@@ -467,7 +505,7 @@
             if (m && m.dist <= th) {
               const w = await S.getWorker(m.nid);
               if (w) { beep(true); toast("اتعرفت عليه: " + w.name + " (تطابق " + Math.round((1 - m.dist) * 100) + "%)", "ok"); opts.onWorker(w); }
-              else found(null);
+              else opts.onMissing(null);
             } else {
               beep(false);
               toast(faces.length ? "مش لاقي حد بالوش ده، جرّب طريقة تانية" : "لسه مفيش ولا وش متسجل", "err");
@@ -479,13 +517,13 @@
       }
     }
 
-    let start = "nid";
-    try { start = localStorage.getItem("hse_id_method") || "nid"; } catch (e) {}
-    if (!methods.some((m) => m[0] === start)) start = "nid";
+    let start = "scan";
+    try { start = localStorage.getItem("hse_id_method2") || "scan"; } catch (e) {}
+    if (!methods.some((m) => m[0] === start)) start = "scan";
     const el = h("div", { class: "identifier" }, tabs, area);
     select(start);
-    onLeave(stopScanner);
-    return { el, stop: stopScanner, reset: () => select(current) };
+    onLeave(stopAll);
+    return { el, stop: stopAll };
   }
 
   /* ================= worker presentation ================= */
@@ -509,10 +547,12 @@
     return { lastInd, indState, indExpires, todayTalks, lastDaily: dailies[0] || null, dailyCount: dailies.length };
   }
 
+  const isMaster = () => S.currentUser() && S.currentUser().role === "master";
+  const isMine = (s, me) => s.officerUid === me.uid || (!!s.officerUsername && s.officerUsername === me.username);
   async function myTodaySessions() {
     const me = S.currentUser();
     const list = await S.listSessionsByDate(today());
-    return list.filter((s) => s.officerUid === me.uid);
+    return list.filter((s) => isMine(s, me));
   }
 
   async function ensureInductionSession() {
@@ -564,7 +604,10 @@
 
       // actions
       const actions = h("div", { class: "row wrap" });
-      if (st.indState !== "ok") {
+      if (st.indState !== "ok" && !isMaster()) {
+        root.insertBefore(h("p", { class: "hint err" }, "الاندكشن بيتسجل من عند الأدمن بس. ابعت العامل للأدمن."), null);
+      }
+      if (st.indState !== "ok" && isMaster()) {
         actions.appendChild(h("button", { class: "btn primary", type: "button", onclick: async (e) => {
           busy(e.currentTarget, true);
           try { await giveInduction(w); w = (await S.getWorker(w.nid)) || w; toast("اتسجل الاندكشن", "ok"); draw(); onChanged && onChanged(); }
@@ -573,7 +616,7 @@
       }
       actions.appendChild(h("button", { class: "btn", type: "button", onclick: () => addToSessionDialog(w, () => { draw(); onChanged && onChanged(); }) }, icon("talk"), "سجّله في محاضرة النهارده"));
       actions.appendChild(h("button", { class: "btn", type: "button", onclick: () => printCards([w]) }, icon("print"), "طباعة الكارت"));
-      actions.appendChild(h("button", { class: "btn", type: "button", onclick: () => editWorkerDialog(w, (nw) => { w = nw; draw(); }) }, "تعديل البيانات / الصورة"));
+      if (isMaster()) actions.appendChild(h("button", { class: "btn", type: "button", onclick: () => editWorkerDialog(w, (nw) => { w = nw; draw(); }) }, "تعديل البيانات / الصورة"));
       if (S.currentUser().role === "master") {
         actions.appendChild(h("button", { class: "btn danger", type: "button", onclick: async () => {
           if (!confirm("متأكد إنك عايز تمسح " + w.name + "؟ سجل الحضور القديم هيفضل موجود.")) return;
@@ -741,8 +784,8 @@
     const tiles = h("div", { class: "tiles" },
       tile("#/lookup", "search", "كشف على عامل", "أخد الاندكشن ومحاضرة النهارده ولا لأ؟"),
       tile("#/talk", "talk", "محاضرة اليوم", "ابدأ محاضرة وسجّل الحاضرين"),
-      tile("#/register", "add", "عامل جديد (اندكشن)", "تسجيل عامل وطباعة الكارت"),
-      me.role === "master" ? tile("#/admin", "admin", "لوحة الماستر", "تقارير، أوفيسرز، وإكسل") : null
+      me.role === "master" ? tile("#/register", "add", "عامل جديد (اندكشن)", "تسجيل عامل وطباعة الكارت") : null,
+      me.role === "master" ? tile("#/admin", "admin", "لوحة الأدمن", "تقارير، أوفيسرز، باسوردات، وإكسل") : null
     );
     const todayBox = h("div", { class: "card" }, h("h3", null, "محاضراتك النهارده"), h("div", { class: "muted" }, "بيحمّل..."));
     setView(pageTitle("أهلاً " + me.name, "النهارده " + fmtDate(today())), tiles, todayBox);
@@ -771,8 +814,8 @@
         result.innerHTML = "";
         result.appendChild(h("div", { class: "card notfound" },
           h("div", { class: "badge bad" }, h("div", { class: "badge-title" }, "✕ العامل ده مش متسجل"), h("div", { class: "badge-sub" }, id ? displayId(id) : "")),
-          h("p", null, "يعني لسه ماخدش الاندكشن. سجّله وادّيله الاندكشن الأول."),
-          h("button", { class: "btn primary", type: "button", onclick: () => { pendingPrefill = { nid: id }; location.hash = "#/register"; } }, icon("add"), "تسجيل العامل ده")
+          h("p", null, isMaster() ? "يعني لسه ماخدش الاندكشن. سجّله وادّيله الاندكشن الأول." : "يعني لسه ماخدش الاندكشن، ومينفعش يشتغل. ابعته للأدمن ياخد الاندكشن ويتسجل."),
+          isMaster() ? h("button", { class: "btn primary", type: "button", onclick: () => { pendingPrefill = { nid: id }; location.hash = "#/register"; } }, icon("add"), "تسجيل العامل ده") : null
         ));
       }
     });
@@ -787,7 +830,7 @@
       listBox);
     try {
       const all = await S.listSessionsByDate(today());
-      all.sort((a, b) => (b.officerUid === me.uid) - (a.officerUid === me.uid) || (b.ts - a.ts));
+      all.sort((a, b) => isMine(b, me) - isMine(a, me) || (b.ts - a.ts));
       listBox.innerHTML = ""; listBox.appendChild(h("h3", null, "محاضرات النهارده في الموقع (" + all.length + ")"));
       if (!all.length) listBox.appendChild(h("div", { class: "empty" }, "لسه مفيش محاضرات النهارده"));
       all.forEach((s) => listBox.appendChild(sessionRow(s)));
@@ -800,7 +843,7 @@
     try { s = await S.getSession(id); } catch (e) { setView(h("div", { class: "card" }, errMsg(e))); return; }
     if (!s) { setView(h("div", { class: "card" }, "المحاضرة دي مش موجودة")); return; }
     const me = S.currentUser();
-    const canEdit = (s.officerUid === me.uid && s.date === today()) || me.role === "master";
+    const canEdit = (isMine(s, me) && s.date === today()) || me.role === "master";
     const countEl = h("span", { class: "count big" }, "0");
     const list = h("div", { class: "list" });
     const lastAdded = h("div", { class: "last-added" });
@@ -852,7 +895,8 @@
           beep(false);
           openModal("العامل مش متسجل", h("div", { class: "stack" },
             h("p", null, (nid ? displayId(nid) + " " : "") + "مش متسجل في السيستم، يعني ماخدش الاندكشن."),
-            h("button", { class: "btn primary", type: "button", onclick: () => { closeModal(); pendingPrefill = { nid, returnTo: "#/talk/" + s.id }; location.hash = "#/register"; } }, "سجّله واديله الاندكشن"),
+            isMaster() ? h("button", { class: "btn primary", type: "button", onclick: () => { closeModal(); pendingPrefill = { nid, returnTo: "#/talk/" + s.id }; location.hash = "#/register"; } }, "سجّله واديله الاندكشن")
+              : h("p", { class: "hint err" }, "ابعته للأدمن ياخد الاندكشن الأول."),
             h("button", { class: "btn", type: "button", onclick: closeModal }, "رجوع")));
         }
       });
@@ -985,7 +1029,7 @@
       [["reports", "التقارير"], ["officers", "الأوفيسرز"], ["workers", "العمال"]].map(([k, l]) =>
         h("a", { class: "seg-btn" + (k === tab ? " on" : ""), href: "#/admin/" + k }, l)));
     const body = h("div");
-    setView(pageTitle("لوحة الماستر"), tabs, body);
+    setView(pageTitle("لوحة الأدمن"), tabs, body);
     if (tab === "reports") adminReports(body);
     if (tab === "officers") adminOfficers(body);
     if (tab === "workers") adminWorkers(body);
@@ -1062,14 +1106,32 @@
         list.innerHTML = ""; list.appendChild(h("h3", null, "الحسابات (" + users.length + ")"));
         users.forEach((u) => list.appendChild(h("div", { class: "list-item" + (u.active ? "" : " off") },
           h("div", { class: "grow" }, h("div", { class: "strong" }, u.name), h("div", { class: "muted small", dir: "ltr" }, u.username + " · " + (u.role === "master" ? "master" : "officer"))),
-          u.uid === me.uid ? h("span", { class: "muted small" }, "أنت") :
+          u.uid === me.uid ? h("span", { class: "muted small" }, "أنت") : h("div", { class: "row" },
+            h("button", { class: "btn small", type: "button", onclick: () => resetPasswordDialog(u, draw) }, "باسورد جديد"),
             h("button", { class: "btn small " + (u.active ? "danger" : ""), type: "button", onclick: async () => {
               try { await S.setUserActive(u.uid, !u.active); draw(); } catch (e) { toast(errMsg(e), "err"); }
-            } }, u.active ? "إيقاف" : "تفعيل"))));
+            } }, u.active ? "إيقاف" : "تفعيل")))));
       } catch (e) { list.innerHTML = ""; list.appendChild(h("div", { class: "hint err" }, errMsg(e))); }
     }
     body.append(h("div", { class: "card" }, h("h3", null, "إضافة أوفيسر"), form), list);
     draw();
+  }
+
+  function resetPasswordDialog(u, done) {
+    const pass = h("input", { class: "input", dir: "ltr", minlength: 6, required: true, placeholder: "الباسورد الجديد (6 على الأقل)", autocomplete: "new-password" });
+    const btn = h("button", { class: "btn primary", type: "submit" }, "حفظ الباسورد الجديد");
+    openModal("باسورد جديد لـ " + u.name, h("form", { class: "stack", onsubmit: async (e) => {
+      e.preventDefault(); busy(btn, true);
+      try {
+        await S.resetPassword(u.uid, pass.value);
+        closeModal();
+        toast("اتغير. ابعت للأوفيسر: اسم المستخدم " + u.username + " والباسورد الجديد", "ok");
+        done && done();
+      } catch (err) { toast(errMsg(err), "err"); busy(btn, false); }
+    } },
+      h("p", null, "اسم المستخدم هيفضل زي ما هو: ", h("b", { dir: "ltr" }, u.username)),
+      field("الباسورد الجديد", pass), btn));
+    setTimeout(() => pass.focus(), 50);
   }
 
   async function adminWorkers(body) {
@@ -1126,8 +1188,8 @@
     const n = $("#bottomnav");
     n.innerHTML = "";
     const r = location.hash.split("/")[1] || "home";
-    [["home", "home", "الرئيسية"], ["lookup", "search", "كشف"], ["talk", "talk", "المحاضرة"], ["register", "add", "عامل جديد"]]
-      .concat(me.role === "master" ? [["admin", "admin", "الماستر"]] : [])
+    [["home", "home", "الرئيسية"], ["lookup", "search", "كشف"], ["talk", "talk", "المحاضرة"]]
+      .concat(me.role === "master" ? [["register", "add", "اندكشن"], ["admin", "admin", "الأدمن"]] : [])
       .forEach(([k, ic, l]) => n.appendChild(h("a", { href: "#/" + k, class: "nav-item" + (r === k ? " on" : "") }, icon(ic), h("span", null, l))));
   }
 
@@ -1144,7 +1206,7 @@
     if (r === "lookup") viewLookup();
     else if (r === "talk" && parts[1]) viewTalkSession(parts[1]);
     else if (r === "talk") viewTalkList();
-    else if (r === "register") viewRegister();
+    else if (r === "register" && me.role === "master") viewRegister();
     else if (r === "admin") viewAdmin(parts[1]);
     else viewHome();
   }

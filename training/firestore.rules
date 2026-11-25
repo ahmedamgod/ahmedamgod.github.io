@@ -21,22 +21,31 @@ service cloud.firestore {
         && request.resource.data.active == true);
       allow update, delete: if master();
     }
+    // اسم المستخدم ← حساب الدخول (للباسورد الجديد)
+    match /logins/{username} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if master();
+    }
+    // تسجيل العمال والاندكشن من الأدمن بس
     match /workers/{id} {
-      allow read, create, update: if active();
-      allow delete: if master();
+      allow read: if active();
+      allow write: if master();
     }
     match /faces/{id} {
-      allow read, create, update: if active();
-      allow delete: if master();
+      allow read: if active();
+      allow write: if master();
     }
     match /sessions/{id} {
-      allow read, create: if active();
+      allow read: if active();
+      allow create: if active() && (request.resource.data.type == 'daily' || master());
       allow update: if active();
       allow delete: if master();
     }
     match /attendance/{id} {
       allow read: if active();
-      allow create: if active() && request.resource.data.officerUid == request.auth.uid;
+      allow create: if active() && request.resource.data.officerUid == request.auth.uid
+        && (request.resource.data.type == 'daily' || master());
       allow delete: if master() || (active() && resource.data.officerUid == request.auth.uid);
       allow update: if master();
     }

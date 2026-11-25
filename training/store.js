@@ -107,11 +107,18 @@
         save();
       },
       async setUserActive(uid, active) { await tick(); if (data.users[uid]) { data.users[uid].active = active; save(); } },
+      async resetPassword(uid, password) {
+        await tick();
+        if (!data.users[uid]) throw new Error("مش موجود");
+        if (String(password).length < 6) throw new Error("الباسورد لازم يكون 6 حروف أو أرقام على الأقل");
+        data.users[uid].password = password; save();
+      },
 
       async getWorker(nid) { await tick(); return data.workers[nid] || null; },
       async getWorkerByCode(code) { await tick(); return vals(data.workers).find((w) => w.code === code) || null; },
       async createWorker(w) {
         await tick();
+        if (current.role !== "master") throw new Error("تسجيل العمال الجداد من الأدمن بس");
         if (data.workers[w.nid]) throw new Error("العامل ده متسجل قبل كده");
         const out = prepareWorker(Object.assign({}, w, { ts: Date.now(), createdBy: current.uid, createdByName: current.name }));
         data.workers[w.nid] = out; save(); return out;
@@ -131,7 +138,8 @@
       async createSession(s) {
         await tick();
         const id = "s_" + Date.now().toString(36) + randomCode().slice(0, 4);
-        const out = Object.assign({ id, date: todayStr(), officerUid: current.uid, officerName: current.name, ts: Date.now(), count: 0 }, s);
+        if (s.type !== "daily" && current.role !== "master") throw new Error("الاندكشن بيتسجل من الأدمن بس");
+        const out = Object.assign({ id, date: todayStr(), officerUid: current.uid, officerUsername: current.username, officerName: current.name, ts: Date.now(), count: 0 }, s);
         data.sessions[id] = out; save(); return out;
       },
       async getSession(id) { await tick(); return data.sessions[id] || null; },
@@ -145,7 +153,7 @@
         const rec = {
           id, sessionId: session.id, nid: worker.nid, workerName: worker.name, company: worker.company || "",
           type: session.type, topic: session.topic, date: session.date,
-          officerUid: current.uid, officerName: current.name, ts: Date.now()
+          officerUid: current.uid, officerUsername: current.username, officerName: current.name, ts: Date.now()
         };
         data.attendance[id] = rec;
         if (data.sessions[session.id]) data.sessions[session.id].count = (data.sessions[session.id].count || 0) + 1;
@@ -191,6 +199,16 @@
       return e;
     }
 
+    async function newAuthAccount(email, password) {
+      // تطبيق ثانوي عشان إنشاء حساب جديد ما يخرجش الأدمن من حسابه
+      const sec = firebase.apps.find((a) => a.name === "secondary") || firebase.initializeApp(cfg, "secondary");
+      try {
+        const cred = await sec.auth().createUserWithEmailAndPassword(email, password);
+        await sec.auth().signOut();
+        return cred.user.uid;
+      } catch (e) { throw authError(e); }
+    }
+
     return {
       mode: "firebase",
       async init() {
@@ -221,24 +239,45 @@
       onAuth(cb) { listeners.push(cb); },
       currentUser() { return current; },
       async login(username, password) {
-        try { await auth.signInWithEmailAndPassword(usernameToEmail(username), password); }
+        const u = cleanUsername(username);
+        let email = usernameToEmail(u);
+        try {
+          const m = await db.collection("logins").doc(u).get();
+          if (m.exists && m.data().email) email = m.data().email;
+        } catch (e) { /* offline or no mapping: use default */ }
+        try { await auth.signInWithEmailAndPassword(email, password); }
         catch (e) { throw authError(e); }
       },
       async logout() { await auth.signOut(); },
 
       async listUsers() {
         const s = await db.collection("users").get();
-        return s.docs.map((d) => Object.assign({ uid: d.id }, d.data())).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+        return s.docs.map((d) => Object.assign({ uid: d.id }, d.data())).filter((u) => !u.replacedBy)
+          .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
       },
       async createUser({ username, password, name, role }) {
         username = cleanUsername(username);
-        // تطبيق ثانوي عشان إنشاء حساب جديد ما يخرجش الماستر من حسابه
-        const sec = firebase.apps.find((a) => a.name === "secondary") || firebase.initializeApp(cfg, "secondary");
-        let cred;
-        try { cred = await sec.auth().createUserWithEmailAndPassword(usernameToEmail(username), password); }
-        catch (e) { throw authError(e); }
-        await sec.auth().signOut();
-        await db.collection("users").doc(cred.user.uid).set({ username, name, role, active: true, ts: Date.now() });
+        if (username === MASTER_USERNAME) throw new Error("اسم المستخدم ده محجوز");
+        const m = await db.collection("logins").doc(username).get();
+        if (m.exists) throw new Error("اسم المستخدم ده موجود قبل كده");
+        const uid = await newAuthAccount(usernameToEmail(username), password);
+        await db.collection("users").doc(uid).set({ username, name, role, active: true, ts: Date.now() });
+        await db.collection("logins").doc(username).set({ email: usernameToEmail(username), uid });
+      },
+      /* Firebase مبيسمحش للأدمن يغيّر باسورد حد تاني من المتصفح، فبنعمل للأوفيسر
+         حساب دخول جديد بنفس اسم المستخدم والصلاحيات، والقديم بيتقفل. */
+      async resetPassword(uid, password) {
+        if (String(password).length < 6) throw new Error("الباسورد لازم يكون 6 حروف أو أرقام على الأقل");
+        const ref = db.collection("users").doc(uid);
+        const snap = await ref.get();
+        if (!snap.exists) throw new Error("مش موجود");
+        const u = snap.data();
+        if (u.username === MASTER_USERNAME) throw new Error("باسورد الأدمن بيتغير من Firebase");
+        const email = u.username + "." + Date.now().toString(36) + "@" + EMAIL_DOMAIN;
+        const newUid = await newAuthAccount(email, password);
+        await db.collection("users").doc(newUid).set({ username: u.username, name: u.name, role: u.role, active: u.active !== false, ts: u.ts || Date.now(), previousUid: uid });
+        await db.collection("logins").doc(u.username).set({ email, uid: newUid });
+        await ref.update({ active: false, replacedBy: newUid });
       },
       async setUserActive(uid, active) { await db.collection("users").doc(uid).update({ active }); },
 
@@ -251,6 +290,7 @@
         return s.empty ? null : s.docs[0].data();
       },
       async createWorker(w) {
+        if (current.role !== "master") throw new Error("تسجيل العمال الجداد من الأدمن بس");
         const ref = db.collection("workers").doc(w.nid);
         const out = prepareWorker(Object.assign({}, w, { ts: Date.now(), createdBy: current.uid, createdByName: current.name }));
         try {
@@ -296,7 +336,8 @@
 
       async createSession(s) {
         const ref = db.collection("sessions").doc();
-        const out = Object.assign({ id: ref.id, date: todayStr(), officerUid: current.uid, officerName: current.name, ts: Date.now(), count: 0 }, s);
+        if (s.type !== "daily" && current.role !== "master") throw new Error("الاندكشن بيتسجل من الأدمن بس");
+        const out = Object.assign({ id: ref.id, date: todayStr(), officerUid: current.uid, officerUsername: current.username, officerName: current.name, ts: Date.now(), count: 0 }, s);
         await ref.set(out); return out;
       },
       async getSession(id) { const s = await db.collection("sessions").doc(id).get(); return s.exists ? s.data() : null; },
@@ -315,7 +356,7 @@
         const rec = {
           id, sessionId: session.id, nid: worker.nid, workerName: worker.name, company: worker.company || "",
           type: session.type, topic: session.topic, date: session.date,
-          officerUid: current.uid, officerName: current.name, ts: Date.now()
+          officerUid: current.uid, officerUsername: current.username, officerName: current.name, ts: Date.now()
         };
         const existing = await ref.get();
         if (existing.exists) return { duplicate: true, rec: existing.data() };
