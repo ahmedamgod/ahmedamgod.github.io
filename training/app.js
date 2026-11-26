@@ -1032,10 +1032,13 @@
     const lastAdded = h("div", { class: "last-added" });
     let recs = [];
 
-    async function refresh() {
-      try { recs = await S.listAttendanceBySession(s.id); } catch (e) { toast(errMsg(e), "err"); }
+    // fetch = false redraws from memory (saves Firebase reads on every scan)
+    async function refresh(fetch = true) {
+      if (fetch) {
+        try { recs = await S.listAttendanceBySession(s.id); } catch (e) { toast(errMsg(e), "err"); }
+        if ((s.count || 0) !== recs.length && S.setSessionCount) { s.count = recs.length; S.setSessionCount(s.id, recs.length).catch(() => {}); }
+      }
       countEl.textContent = String(recs.length);
-      if ((s.count || 0) !== recs.length && S.setSessionCount) { s.count = recs.length; S.setSessionCount(s.id, recs.length).catch(() => {}); }
       list.innerHTML = "";
       if (!recs.length) list.appendChild(h("div", { class: "empty" }, "لسه محدش اتسجل"));
       recs.forEach((r, i) => list.appendChild(h("div", { class: "list-item" },
@@ -1043,10 +1046,11 @@
         h("div", { class: "grow" }, h("div", { class: "strong" }, r.workerName), h("div", { class: "muted small" }, [r.company, displayId(r.nid), fmtTime(r.ts)].filter(Boolean).join(" · "))),
         canEdit ? h("button", { class: "icon-btn", type: "button", title: "شيل", "aria-label": "شيل " + r.workerName, onclick: async () => {
           try {
-            await S.removeAttendance(r.id); refresh();
+            await S.removeAttendance(r.id); recs = recs.filter((x) => x.id !== r.id); refresh(false);
             undoBar("اتشال " + r.workerName, async () => {
-              await S.addAttendance(s, { nid: r.nid, name: r.workerName, company: r.company });
-              refresh();
+              const back = await S.addAttendance(s, { nid: r.nid, name: r.workerName, company: r.company });
+              if (!back.duplicate) recs.unshift(back.rec);
+              refresh(false);
             });
           } catch (e) { toast(errMsg(e), "err"); }
         } }, "✕") : null
@@ -1061,7 +1065,7 @@
         lastAdded.appendChild(h("div", { class: "badge " + (r.duplicate ? "warn" : noInd ? "warn" : "ok") },
           h("div", { class: "badge-title" }, (r.duplicate ? "متسجل قبل كده: " : "✓ اتسجل: ") + w.name),
           noInd ? h("div", { class: "badge-sub" }, "تنبيه: العامل ده ماخدش الاندكشن!") : h("div", { class: "badge-sub" }, w.company || "")));
-        if (!r.duplicate) { toast("✓ " + w.name, "ok"); refresh(); }
+        if (!r.duplicate) { toast("✓ " + w.name, "ok"); recs.unshift(r.rec); refresh(false); }
         else toast(w.name + " متسجل قبل كده");
       } catch (e) { toast(errMsg(e), "err"); }
     }
@@ -2055,7 +2059,7 @@
   S.init();
 
   /* ---------- update check: shows a banner when a newer version is published ---------- */
-  const APP_VERSION = 24;
+  const APP_VERSION = 25;
   async function hardReload() {
     try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map((r) => r.unregister())); } catch (e) {}
     try { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); } catch (e) {}
