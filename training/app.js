@@ -923,7 +923,9 @@
     );
     const todayBox = h("div", { class: "card" }, h("h3", null, "محاضراتك النهارده"), h("div", { class: "muted" }, "بيحمّل..."));
     const reqBox = h("div");
-    setView(pageTitle("أهلاً " + me.name, "النهارده " + fmtDate(today())), reqBox, tiles, todayBox, shareCard());
+    setView(pageTitle("أهلاً " + me.name, "النهارده " + fmtDate(today())), reqBox, tiles, todayBox, shareCard(),
+      h("button", { class: "btn", type: "button", style: "width:100%", onclick: startTour }, "❓ شرح التطبيق"));
+    maybeTour();
     if (me.role === "master") {
       S.listUsers().then((us) => {
         const n = us.filter((u) => u.status === "pending").length;
@@ -1231,7 +1233,7 @@
     if (me.role !== "master") { location.hash = "#/home"; return; }
     tab = tab || "reports";
     const tabs = h("div", { class: "seg tabs-grid" },
-      [["reports", "التقارير"], ["officers", "الأوفيسرز"], ["workers", "العمال"], ["import", "استيراد إكسل"]].map(([k, l]) =>
+      [["reports", "التقارير"], ["officers", "الأوفيسرز"], ["workers", "العمال"], ["import", "استيراد إكسل"], ["data", "البيانات"]].map(([k, l]) =>
         h("a", { class: "seg-btn" + (k === tab ? " on" : ""), href: "#/admin/" + k }, l)));
     const body = h("div");
     setView(pageTitle("لوحة الأدمن", "نسخة التطبيق " + APP_VERSION), tabs, body,
@@ -1240,6 +1242,7 @@
     if (tab === "officers") adminOfficers(body);
     if (tab === "workers") adminWorkers(body);
     if (tab === "import") adminImport(body);
+    if (tab === "data") adminData(body);
   }
 
   function adminReports(body) {
@@ -1429,7 +1432,7 @@
   function adminImport(body) {
     const file = h("input", { type: "file", accept: ".xlsx,.xls,.csv", hidden: true });
     const pick = h("button", { class: "btn primary big", type: "button", onclick: () => file.click() }, "اختار شيت الإكسل");
-    const tpl = h("button", { class: "btn small", type: "button", onclick: () => exportXlsx("نموذج-العمال.xlsx", [["العمال", [
+    const tpl = h("button", { class: "btn small", type: "button", onclick: () => exportXlsx("workers-template.xlsx", [["العمال", [
       { "الرقم القومي": "", "الاسم": "", "الوظيفة": "", "الشركة": "", "التليفون": "", "تاريخ الاندكشن": "" }]]]) }, "نزّل نموذج شيت فاضي");
     const out = h("div");
     body.append(h("div", { class: "card stack" },
@@ -1884,6 +1887,135 @@
     onLeave(() => { ordersListEl = null; });
   }
 
+  /* ================= البيانات: تحميل كل حاجة / مسح كل حاجة ================= */
+  async function downloadEverything(btn) {
+    busy(btn, true, "بيجمّع البيانات...");
+    try {
+      const d = await S.exportAll();
+      const dt = (ts) => (ts ? U.todayStr(new Date(ts)) + " " + fmtTime(ts) : "");
+      await exportXlsx("HSE-all-data-" + today() + ".xlsx", [
+        ["العمال", d.workers.map((w) => ({ "الاسم": w.name, "رقم الهوية": w.nid, "الشركة": w.company || "", "الوظيفة": w.job || "", "التليفون": w.phone || "",
+          "العنوان": w.address || "", "تاريخ الميلاد": w.birthDate || "", "النوع": w.gender || "", "المحافظة": w.governorate || "",
+          "تاريخ الاندكشن": w.inductionDate || "", "الكود": w.code || "", "اتسجل بواسطة": w.createdByName || "", "وقت التسجيل": dt(w.ts) }))],
+        ["المحاضرات", d.sessions.sort((a, b) => a.ts - b.ts).map((s) => ({ "التاريخ": s.date, "الوقت": fmtTime(s.ts), "النوع": TYPE_LABEL[s.type] || s.type, "الموضوع": s.topic,
+          "المكان": s.location || "", "الأوفيسر": s.officerName, "عدد الحضور": d.attendance.filter((a) => a.sessionId === (s.id || s._id)).length }))],
+        ["الحضور", d.attendance.sort((a, b) => a.ts - b.ts).map((a) => ({ "التاريخ": a.date, "الوقت": fmtTime(a.ts), "النوع": TYPE_LABEL[a.type] || a.type, "الموضوع": a.topic,
+          "اسم العامل": a.workerName, "رقم الهوية": a.nid, "الشركة": a.company || "", "الأوفيسر": a.officerName }))],
+        ["الحسابات", d.users.filter((u) => !u.replacedBy).map((u) => ({ "الاسم": u.name, "اسم المستخدم": u.username, "الصلاحية": u.role === "master" ? "ماستر" : "أوفيسر",
+          "الحالة": u.status === "pending" ? "مستني موافقة" : u.status === "rejected" ? "مرفوض" : u.active ? "شغال" : "متوقف",
+          "الوظيفة": u.jobTitle || "", "الشركة": u.company || "", "التليفون": u.phone || "" }))],
+        ["الأوامر", d.announcements.sort((a, b) => a.ts - b.ts).map((o) => ({ "الوقت": dt(o.ts), "الأمر": o.text, "عاجل": o.urgent ? "نعم" : "لا",
+          "من": o.createdByName, "عدد اللي استلموا": (o.acks || []).length, "استلموا": (o.acks || []).map((k) => k.name).join("، ") }))]
+      ]);
+      toast("اتحمّل الملف ✓", "ok");
+    } catch (e) { toast(errMsg(e), "err"); }
+    busy(btn, false);
+  }
+
+  function adminData(body) {
+    const me = S.currentUser();
+    const dl = h("button", { class: "btn primary big", type: "button", onclick: (e) => downloadEverything(e.currentTarget) }, "⬇ تحميل كل البيانات (إكسل)");
+    body.append(h("div", { class: "card stack" },
+      h("h3", null, "نسخة من كل البيانات"),
+      h("p", { class: "muted small" }, "ملف إكسل واحد فيه: العمال، المحاضرات، الحضور، الحسابات، والأوامر الإدارية ومين استلمها. احتفظ بيه كنسخة احتياطية."),
+      dl));
+    if (!me.owner) {
+      body.append(h("div", { class: "card muted small" }, "🔒 مسح كل البيانات متاح لصاحب التطبيق بس."));
+      return;
+    }
+    const accounts = h("input", { type: "checkbox" });
+    const phrase = "امسح الكل";
+    const confirmIn = h("input", { class: "input", placeholder: "اكتب: " + phrase, autocomplete: "off" });
+    const wipe = h("button", { class: "btn danger big", type: "button", disabled: true }, "🗑 مسح كل البيانات");
+    confirmIn.addEventListener("input", () => (wipe.disabled = confirmIn.value.trim() !== phrase));
+    wipe.addEventListener("click", async () => {
+      if (!confirm("آخر تأكيد: كل البيانات هتتمسح ومش هترجع. تكمل؟")) return;
+      busy(wipe, true, "بيمسح...");
+      try {
+        const n = await S.wipeAll({ accounts: accounts.checked }, (k) => (wipe.textContent = "بيمسح... " + k));
+        facesCache = null; companiesCache = null; orders = [];
+        try { Object.keys(localStorage).filter((k) => k.startsWith("hse_orders_")).forEach((k) => localStorage.removeItem(k)); } catch (e) {}
+        toast("اتمسح كل حاجة. التطبيق رجع جديد ✓", "ok");
+        location.hash = "#/home";
+      } catch (e) { toast(errMsg(e), "err"); busy(wipe, false); }
+    });
+    body.append(h("div", { class: "card stack danger-zone" },
+      h("h3", null, "⚠️ مسح كل البيانات (التطبيق يرجع جديد)"),
+      h("p", { class: "small" }, "هيتمسح: كل العمال، والمحاضرات، والحضور، والأوامر الإدارية. المسح ده مش هيرجع تاني."),
+      h("p", { class: "small strong" }, "نزّل نسخة من البيانات الأول من الزرار اللي فوق."),
+      h("label", { class: "check small" }, accounts, "امسح حسابات الأوفيسرز والماسترز كمان (حسابك إنت هيفضل)"),
+      field("للتأكيد اكتب: " + phrase, confirmIn),
+      wipe));
+  }
+
+  /* ================= شرح أول مرة ================= */
+  const tourKey = () => "hse_tour_done:" + ((S.currentUser() || {}).username || "");
+  function tourSteps() {
+    const me = S.currentUser(), m = me.role === "master";
+    return [
+      { t: "أهلاً بيك 👋", d: "ده شرح سريع لأهم الأزرار في التطبيق. تقدر تتخطاه في أي وقت." },
+      { s: 'a.tile[href="#/lookup"]', t: "كشف على عامل", d: "وجّه الكاميرا على كارت الـ QR أو البطاقة، أو اكتب الرقم القومي أو الاسم، وهيقولك العامل أخد الاندكشن ومحاضرة النهارده ولا لأ." },
+      { s: 'a.tile[href="#/talk"]', t: "محاضرة اليوم", d: "ابدأ محاضرة (Toolbox Talk) وسجّل الحاضرين. الكاميرا بتفضل مفتوحة وتمسح عامل ورا التاني." },
+      { s: 'a.tile[href="#/orders"]', t: "الأوامر الإدارية", d: m ? "ابعت أمر أو تعليمات لكل الناس. هيرن عندهم بصوت، وتقدر تشوف مين استلم." : "هنا الأوامر اللي بتوصلك من الإدارة. اقراها ودوس «تم الاستلام»." },
+      m && { s: 'a.tile[href="#/register"]', t: "عامل جديد (اندكشن)", d: "سجّل عامل جديد بتصوير البطاقة، والتطبيق يقرا الرقم والاسم لوحده، واطبعله كارت QR." },
+      m && { s: 'a.tile[href="#/admin/import"]', t: "استيراد إكسل", d: "ارفع شيت فيه العمال اللي أخدوا الاندكشن قبل كده، مرة واحدة." },
+      m && { s: 'a.tile[href="#/admin"]', t: "لوحة الأدمن", d: "التقارير، الحسابات وطلبات الأوفيسرز الجديدة، قايمة العمال، وتحميل كل البيانات." },
+      { s: "#bellBtn", t: "الجرس 🔔", d: "بيرن ويظهر عليه رقم أول ما يوصل أمر إداري جديد." },
+      { s: "#bottomnav", t: "القايمة اللي تحت", d: "تتنقل منها بسرعة بين الصفحات من أي مكان." },
+      { s: ".card.share", t: "شارك التطبيق", d: m ? "ابعت اللينك أو خلّي الأوفيسر يصوّر الـ QR عشان ينزّل التطبيق." : "تقدر تبعت التطبيق لزميلك من هنا." },
+      { t: "كده خلصنا 🎉", d: "لو حبيت تشوف الشرح تاني، دوس «❓ شرح التطبيق» في الصفحة الرئيسية." }
+    ].filter(Boolean);
+  }
+  function startTour() {
+    const steps = tourSteps();
+    let i = 0;
+    const spot = h("div", { class: "tour-spot" });
+    const counter = h("span", { class: "muted small" });
+    const title = h("h3");
+    const desc = h("p");
+    const prev = h("button", { class: "btn small", type: "button" }, "السابق");
+    const next = h("button", { class: "btn small primary", type: "button" }, "التالي");
+    const skip = h("button", { class: "btn small tour-skip", type: "button" }, "تخطي");
+    const card = h("div", { class: "tour-card", role: "dialog" }, h("div", { class: "row between" }, counter, skip), title, desc, h("div", { class: "row between" }, prev, next));
+    const root = h("div", { class: "tour" }, spot, card);
+    document.body.appendChild(root);
+    const end = () => { root.remove(); window.removeEventListener("resize", place); try { localStorage.setItem(tourKey(), "1"); } catch (e) {} };
+    function place() {
+      const st = steps[i];
+      const el = st.s && document.querySelector(st.s);
+      if (!el || el.offsetParent === null && getComputedStyle(el).position !== "fixed") {
+        spot.style.cssText = "left:50%;top:50%;width:0;height:0";
+        card.style.cssText = "left:16px;right:16px;top:50%;transform:translateY(-50%)";
+        return;
+      }
+      const r = el.getBoundingClientRect(), pad = 6;
+      spot.style.cssText = `left:${r.left - pad}px;top:${r.top - pad}px;width:${r.width + pad * 2}px;height:${r.height + pad * 2}px`;
+      const below = r.bottom + 12, ch = card.offsetHeight || 180;
+      const top = below + ch < innerHeight - 8 ? below : Math.max(8, r.top - ch - 12);
+      card.style.cssText = `left:16px;right:16px;top:${top}px`;
+    }
+    function show() {
+      const st = steps[i];
+      counter.textContent = (i + 1) + " / " + steps.length;
+      title.textContent = st.t; desc.textContent = st.d;
+      prev.style.visibility = i ? "visible" : "hidden";
+      next.textContent = i === steps.length - 1 ? "يلا نبدأ ✓" : "التالي";
+      const el = st.s && document.querySelector(st.s);
+      if (el && getComputedStyle(el).position !== "fixed") el.scrollIntoView({ block: "center", behavior: "instant" in document.documentElement.style ? "instant" : "auto" });
+      setTimeout(place, 60);
+    }
+    next.addEventListener("click", () => { if (i < steps.length - 1) { i++; show(); } else end(); });
+    prev.addEventListener("click", () => { if (i) { i--; show(); } });
+    skip.addEventListener("click", end);
+    window.addEventListener("resize", place);
+    show();
+  }
+  function maybeTour() {
+    let done = false;
+    try { done = localStorage.getItem(tourKey()) === "1"; } catch (e) { done = true; }
+    if (!done) setTimeout(() => { if ((location.hash || "#/home").match(/^#?\/?(home)?$/) || location.hash === "#/home" || location.hash === "") startTour(); }, 700);
+  }
+
   /* ================= router ================= */
   function nav() {
     const me = S.currentUser();
@@ -1923,7 +2055,7 @@
   S.init();
 
   /* ---------- update check: shows a banner when a newer version is published ---------- */
-  const APP_VERSION = 23;
+  const APP_VERSION = 24;
   async function hardReload() {
     try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map((r) => r.unregister())); } catch (e) {}
     try { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); } catch (e) {}

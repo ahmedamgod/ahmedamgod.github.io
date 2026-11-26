@@ -339,3 +339,16 @@ textarea.input { resize: vertical; min-height: 110px; font: inherit; }
 .ntfy-card { border: 2px dashed var(--orange); }
 .ntfy-card summary { cursor: pointer; font-weight: 800; }
 code.topic { flex: 1; padding: 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); font-size: .95rem; overflow-wrap: anywhere; user-select: all; -webkit-user-select: all; }
+
+/* ---------- data tab ---------- */
+.danger-zone { border: 2px solid var(--bad); }
+.danger-zone h3 { color: var(--bad); }
+@media (max-width: 520px) { .seg.tabs-grid { grid-template-columns: repeat(3, 1fr); } }
+
+/* ---------- guided tour ---------- */
+.tour { position: fixed; inset: 0; z-index: 90; }
+.tour-spot { position: fixed; border-radius: 14px; box-shadow: 0 0 0 9999px rgba(3, 8, 16, .78); border: 3px solid var(--orange); transition: all .25s ease; pointer-events: none; }
+.tour-card { position: fixed; max-width: 520px; margin: 0 auto; background: var(--card); color: var(--text); border-radius: 16px; padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.4); display: flex; flex-direction: column; gap: 8px; transition: top .25s ease; }
+.tour-card h3 { margin: 0; color: var(--orange); }
+.tour-card p { margin: 0; line-height: 1.7; }
+.tour-skip { border: 0; background: transparent; color: var(--muted); text-decoration: underline; }

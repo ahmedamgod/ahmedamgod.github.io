@@ -226,6 +226,21 @@
         a.acks = a.acks || {}; a.acks[current.uid] = { uid: current.uid, name: current.name, username: current.username, ts: Date.now() }; save();
       },
       async listAcks(id) { await tick(); const a = data.announcements[id]; return a ? vals(a.acks || {}).sort((x, y) => x.ts - y.ts) : []; },
+
+      /* ---- نسخة احتياطية ومسح كامل ---- */
+      async exportAll() {
+        await tick();
+        return { workers: vals(data.workers), sessions: vals(data.sessions), attendance: vals(data.attendance),
+          users: vals(data.users).map((u) => { const c = Object.assign({}, u); delete c.password; return c; }),
+          announcements: vals(data.announcements).map((a) => Object.assign({}, a, { acks: vals(a.acks || {}) })) };
+      },
+      async wipeAll({ accounts } = {}, onProgress) {
+        await tick();
+        if (!current.owner) throw new Error("مسح كل البيانات لصاحب التطبيق بس");
+        data.workers = {}; data.faces = {}; data.sessions = {}; data.attendance = {}; data.announcements = {};
+        if (accounts) Object.keys(data.users).forEach((k) => { if (data.users[k].username !== MASTER_USERNAME) delete data.users[k]; });
+        save(); if (this._annCb) this._annCb();
+      },
       async deleteSessions(ids) {
         await tick();
         if (current.role !== "master") throw new Error("مسح المحاضرات من الأدمن بس");
@@ -560,6 +575,40 @@
       async listAcks(id) {
         const s = await db.collection("announcements").doc(id).collection("acks").get();
         return s.docs.map((d) => d.data()).sort((a, b) => a.ts - b.ts);
+      },
+
+      /* ---- نسخة احتياطية ومسح كامل ---- */
+      async exportAll() {
+        const all = async (c) => (await db.collection(c).get()).docs.map((d) => Object.assign({ _id: d.id }, d.data()));
+        const [workers, sessions, attendance, users, announcements] = await Promise.all(["workers", "sessions", "attendance", "users", "announcements"].map(all));
+        for (const a of announcements) a.acks = (await db.collection("announcements").doc(a._id).collection("acks").get()).docs.map((d) => d.data());
+        return { workers, sessions, attendance, users, announcements };
+      },
+      async wipeAll({ accounts } = {}, onProgress) {
+        if (!current.owner) throw new Error("مسح كل البيانات لصاحب التطبيق بس");
+        let batch = db.batch(), ops = 0, done = 0;
+        const flush = async () => { if (ops) { await batch.commit(); batch = db.batch(); ops = 0; if (onProgress) onProgress(done); } };
+        const del = async (ref) => { batch.delete(ref); ops++; done++; if (ops >= 400) await flush(); };
+        try {
+          const anns = await db.collection("announcements").get();
+          for (const a of anns.docs) {
+            const acks = await a.ref.collection("acks").get();
+            for (const k of acks.docs) await del(k.ref);
+            await del(a.ref);
+          }
+          for (const c of ["attendance", "sessions", "faces", "workers"]) {
+            const snap = await db.collection(c).get();
+            for (const d of snap.docs) await del(d.ref);
+          }
+          if (accounts) {
+            const us = await db.collection("users").get();
+            const names = new Set();
+            for (const d of us.docs) { const un = d.data().username; if (un !== MASTER_USERNAME) { names.add(un); await del(d.ref); } }
+            for (const un of names) if (un) await del(db.collection("logins").doc(un));
+          }
+          await flush();
+        } catch (e) { throw authError(e); }
+        return done;
       },
       /* بيمسح المحاضرات ومعاها تسجيلات الحضور بتاعتها */
       async deleteSessions(ids) {
