@@ -23,8 +23,7 @@ export default {
       ${mode === 'welcome' ? `<div class="col gap auth-actions">
         <button class="btn primary block lg" data-m="register">ابدأ رحلتك</button>
         <button class="btn soft block lg" data-m="login">عندي حساب</button>
-        <button class="btn ghost block" data-guest>جرّب كضيف</button>
-        <p class="muted small center">وضع الضيف بيحفظ على الجهاز بس، ومن غير متابعة من مشرف.</p></div>`
+        <p class="muted small center">اعمل حساب عشان بياناتك تتحفظ وتدخل بيها من أي موبايل 🌿</p></div>`
       : mode === 'forgot' ? `<form class="card auth-form" id="ff" novalidate>
         <h2>نسيت الباسورد؟</h2><p class="muted small center">اكتب إيميلك وهنبعتلك رابط تعمل منه باسورد جديد</p>
         <label class="field"><span>الإيميل</span><input name="e" type="email" autocomplete="email" dir="ltr" required></label>
