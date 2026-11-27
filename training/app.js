@@ -1997,10 +1997,13 @@
         card.style.cssText = "left:16px;right:16px;top:50%;transform:translateY(-50%)";
         return;
       }
-      const r = el.getBoundingClientRect(), pad = 6;
+      // when the page is zoomed (phone in "Desktop site" mode) measured boxes are scaled; undo that
+      const z = parseFloat(document.documentElement.style.zoom) || 1;
+      const b = el.getBoundingClientRect(), pad = 6, vh = innerHeight / z;
+      const r = { left: b.left / z, top: b.top / z, width: b.width / z, height: b.height / z, bottom: b.bottom / z };
       spot.style.cssText = `left:${r.left - pad}px;top:${r.top - pad}px;width:${r.width + pad * 2}px;height:${r.height + pad * 2}px`;
       const below = r.bottom + 12, ch = card.offsetHeight || 180;
-      const top = below + ch < innerHeight - 8 ? below : Math.max(8, r.top - ch - 12);
+      const top = below + ch < vh - 8 ? below : Math.max(8, r.top - ch - 12);
       card.style.cssText = `left:16px;right:16px;top:${top}px`;
     }
     function show() {
@@ -2062,17 +2065,6 @@
   $("#demoBanner").hidden = S.mode !== "demo";
   S.onAuth(() => route());
   S.init();
-  // phone showing the desktop version of sites (Chrome "Desktop site") makes everything tiny
-  try {
-    const small = Math.min(screen.width, screen.height) < 600;
-    const touch = navigator.maxTouchPoints > 0 || "ontouchstart" in window;
-    if (small && touch && window.innerWidth > 800) {
-      document.body.appendChild(h("div", { class: "desk-warn" },
-        h("b", null, "الشكل صغير؟ "),
-        "اقفل «Desktop site» من Chrome: افتح Chrome ← ⋮ ← شيل العلامة من Desktop site، وبعدين افتح التطبيق تاني.",
-        h("button", { type: "button", onclick: (e) => e.currentTarget.parentNode.remove() }, "✕")));
-    }
-  } catch (e) {}
   const splashStart = Date.now();
   setTimeout(() => {
     const sp = document.getElementById("splash"); if (!sp) return;
@@ -2080,7 +2072,7 @@
   }, Math.max(0, 1700 - (Date.now() - splashStart)));
 
   /* ---------- update check: shows a banner when a newer version is published ---------- */
-  const APP_VERSION = 27;
+  const APP_VERSION = 28;
   async function hardReload() {
     try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map((r) => r.unregister())); } catch (e) {}
     try { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); } catch (e) {}
