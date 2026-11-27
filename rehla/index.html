@@ -16,6 +16,23 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@400;500;600;700;800&family=Marhey:wght@600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/app.css">
+  <script>
+    // لو Chrome شغال على "إصدار سطح المكتب" على موبايل، الصفحة بتتعرض بعرض كمبيوتر وكل حاجة بتصغر.
+    // هنا بنكبّر التطبيق عشان يملا شاشة الموبايل زي أي تطبيق.
+    (function () {
+      function fit() {
+        var el = document.documentElement;
+        var touch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+        var sw = screen.width, w = window.innerWidth;
+        var z = touch && sw && w > sw * 1.25 ? w / sw : 1;
+        el.style.zoom = z === 1 ? '' : z.toFixed(3);
+        el.style.setProperty('--z', z.toFixed(3));
+      }
+      fit();
+      addEventListener('resize', fit);
+      addEventListener('orientationchange', function () { setTimeout(fit, 300); });
+    })();
+  </script>
 </head>
 <body>
   <!-- فلاتر الألوان المائية المشتركة لكل الرسومات -->
