@@ -7,6 +7,7 @@ import { DAILY_DHIKR } from '../data/azkar.js';
 import { MESSAGES, MOODS, PRAYERS } from '../data/content.js';
 import { nextPrayer } from '../notify.js';
 import { installBanner } from '../install.js';
+import { hasUpdate } from '../update.js';
 
 let msgShift = 0;
 
@@ -70,8 +71,9 @@ export default {
     <section class="home-head">
       <a href="#/notifications" class="round-btn" aria-label="الإشعارات${unread ? ' — ' + unread + ' جديدة' : ''}">${solid('bell', 26)}${unread ? `<span class="badge-dot">${num(Math.min(unread, 99))}</span>` : ''}</a>
       <div class="hh-logo">${logo(190, true)}</div>
-      <a href="#/profile/settings" class="round-btn" aria-label="الإعدادات">${solid('gear', 26)}</a>
+      <a href="#/profile/settings" class="round-btn" aria-label="الإعدادات${hasUpdate() ? ' — فيه تحديث' : ''}">${solid('gear', 26)}${hasUpdate() ? '<span class="badge-dot upd">✨</span>' : ''}</a>
     </section>
+    ${hasUpdate() ? '<button class="update-pill" data-apply-update>✨ فيه تحديث جديد — دوس هنا تحدّث</button>' : ''}
     <p class="hello">${greeting()}${name ? ' يا ' + esc(name) : ''} 🌿 <span>${fmtDate(k)}</span></p>
 
     <section class="hh-cards">

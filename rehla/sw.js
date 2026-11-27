@@ -1,9 +1,10 @@
 // Service worker: التطبيق يشتغل أوفلاين بالكامل
-const VERSION = 'rehla-v1.2.0';
+// غيّر الرقم ده (ومعاه APP_VERSION في js/update.js) مع كل إصدار جديد
+const VERSION = 'rehla-v1.3.0';
 const CORE = [
   './', './index.html', './manifest.webmanifest', './css/app.css',
   './js/app.js', './js/db.js', './js/store.js', './js/auth.js', './js/util.js', './js/ui.js', './js/art.js',
-  './js/stats.js', './js/notify.js', './js/prayertimes.js', './js/assistant.js', './js/install.js',
+  './js/stats.js', './js/notify.js', './js/prayertimes.js', './js/assistant.js', './js/install.js', './js/update.js',
   './js/data/azkar.js', './js/data/quran.js', './js/data/content.js',
   './js/screens/home.js', './js/screens/worship.js', './js/screens/habits.js', './js/screens/journal.js',
   './js/screens/mood.js', './js/screens/health.js', './js/screens/journey.js', './js/screens/achievements.js',
@@ -12,8 +13,19 @@ const CORE = [
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png',
 ];
 
+// الإصدار الجديد بيستنى لحد ما المستخدم يدوس "حدّث دلوقتي"
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(CORE)).then(() => self.skipWaiting()));
+  e.waitUntil((async () => {
+    const c = await caches.open(VERSION);
+    await c.addAll(CORE.map((u) => new Request(u, { cache: 'reload' })));
+    // الإصدارات القديمة (قبل ١.٣) مكانش فيها زرار تحديث، فبنحدّثها على طول
+    const keys = await caches.keys();
+    if (keys.some((k) => /^rehla-v1\.[0-2]\./.test(k))) self.skipWaiting();
+  })());
+});
+
+self.addEventListener('message', (e) => {
+  if (e.data?.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('activate', (e) => {

@@ -8,6 +8,7 @@ import { requestPermission, tick } from '../notify.js';
 import { pinHash, lockJournal } from './journal.js';
 import * as db from '../db.js';
 import { installHelp } from '../install.js';
+import { APP_VERSION, hasUpdate, checkNow } from '../update.js';
 
 export default {
   render(params) {
@@ -184,7 +185,10 @@ function settings() {
   const s = getState().settings;
   const perm = 'Notification' in window ? Notification.permission : 'unsupported';
   return pageHead('الإعدادات') + `
-  <section class="card"><h2>📱 التطبيق</h2>${installHelp()}</section>
+  <section class="card"><h2>📱 التطبيق</h2>
+    <div class="row between update-row"><span>الإصدار <b>${num(APP_VERSION)}</b></span>
+      ${hasUpdate() ? '<button class="btn primary sm" data-apply-update>✨ حدّث للإصدار الجديد</button>' : '<button class="btn soft sm" data-act="check-update">↻ دوّر على تحديث</button>'}</div>
+    ${installHelp()}</section>
   <section class="card"><h2>الشكل</h2>
     <div class="field"><span>الوضع</span>${segmented([['light', '☀️ فاتح'], ['dark', '🌙 غامق'], ['auto', '⚙️ زي الجهاز']], s.theme, 'theme')}</div>
     <div class="field"><span>اللغة</span><p class="small">العربية (العامية المصرية) 🇪🇬</p></div>
@@ -212,7 +216,7 @@ function settings() {
     <a href="#/profile" class="btn soft block">${icon('download', 18)} التصدير والاسترجاع من "حسابي"</a>
     <button class="btn danger-ghost block mt-s" data-act="reset">ابدأ رحلتي من الأول (امسح التسجيلات)</button>
   </section>
-  <p class="muted small center">رحلة · نسخة ١.٠</p>`;
+  <p class="muted small center">رحلة · الإصدار ${num(APP_VERSION)}</p>`;
 }
 
 function mountSettings(el) {
@@ -228,6 +232,16 @@ function mountSettings(el) {
         if (reg) reg.showNotification('رحلة 🌿', { body: 'الإشعارات شغالة تمام!', icon: 'icons/icon-192.png', dir: 'rtl', lang: 'ar' });
         else new Notification('رحلة 🌿', { body: 'الإشعارات شغالة تمام!' });
       } else toast('الإشعارات مش مسموحة — هنعرض التذكيرات جوه التطبيق', 'info');
+    }
+    if (a === 'check-update') {
+      const btn = e.target.closest('[data-act]');
+      btn.disabled = true; btn.textContent = 'بيدوّر…';
+      const r = await checkNow();
+      if (r === 'latest') toast('عندك آخر إصدار ✓');
+      else if (r === 'offline') toast('مفيش نت دلوقتي — جرّب تاني', 'err');
+      else if (r === 'unsupported') toast('المتصفح ده مش بيدعم التحديث التلقائي — اعمل تحديث للصفحة', 'info');
+      else toast('لقينا تحديث جديد! دوس "حدّث" ✨');
+      update(() => {});
     }
     if (a === 'lock-now') { lockJournal(); toast('اتقفلت 🔒'); }
     if (a === 'reset' && await confirmBox('هيتمسح كل تسجيلاتك (صلاة، عادات، يوميات…) بس هيفضل اسمك وإعداداتك. متأكد؟', { danger: true, ok: 'امسح' })) {

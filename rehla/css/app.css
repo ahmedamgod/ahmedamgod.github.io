@@ -549,6 +549,14 @@ mark { background: var(--yellow); color: inherit; border-radius: 4px; padding: 0
 .empty svg { width: 130px; height: 110px; }
 .empty p { max-width: 300px; }
 
+/* ---------- update ---------- */
+#update-bar { position: fixed; z-index: 70; left: 12px; right: 12px; max-width: 520px; margin: 0 auto; bottom: calc(108px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 10px; background: var(--card); border: 1.5px solid #CFE2B2; border-radius: 20px; padding: 10px 12px; box-shadow: var(--shadow-lg); font-weight: 700; animation: toast-in .4s cubic-bezier(.2,.8,.2,1); }
+.ub-ic { font-size: 1.3rem; }
+.update-pill { display: block; margin: 0 auto 8px; border: 0; border-radius: 999px; padding: 8px 18px; background: linear-gradient(90deg, #E9F3DA, #FFF4C9); color: #3F6E2E; font-weight: 700; cursor: pointer; box-shadow: var(--shadow); animation: glow 2s ease-in-out infinite; }
+@keyframes glow { 50% { box-shadow: 0 0 0 6px rgba(145,170,98,.18), var(--shadow); } }
+.badge-dot.upd { background: #F6C94F; font-size: 11px; }
+.update-row { padding: 4px 0 10px; border-bottom: 1px dashed var(--line); margin-bottom: 10px; }
+
 /* ---------- install ---------- */
 .install-card { display: flex; align-items: center; gap: 12px; background: linear-gradient(120deg, #E9F3DA, #FFFBEE); border: 1.5px solid #CFE2B2; animation: pop-in .4s; }
 .install-card img { border-radius: 14px; box-shadow: var(--shadow); flex-shrink: 0; }

@@ -5,6 +5,7 @@ import { solid, scene } from './art.js';
 import { toast, closeTopSheet } from './ui.js';
 import { startScheduler } from './notify.js';
 import { promptInstall, hideBanner, isStandalone } from './install.js';
+import { initUpdates, applyUpdate } from './update.js';
 
 import home from './screens/home.js';
 import worship from './screens/worship.js';
@@ -104,6 +105,7 @@ document.addEventListener('click', async (e) => {
     else if (r === 'unavailable') toast('من قايمة المتصفح اختار "تثبيت التطبيق"', 'info');
     if (store.getState()?.onboarded) render({ keepScroll: true });
   }
+  if (e.target.closest('[data-apply-update]')) applyUpdate();
   if (e.target.closest('[data-install-hide]')) { hideBanner(); document.getElementById('install-card')?.remove(); }
 });
 const rerenderIfReady = () => { if (store.getState()?.onboarded) render({ keepScroll: true }); };
@@ -158,8 +160,7 @@ async function boot() {
 window.addEventListener('pagehide', () => store.flush());
 document.addEventListener('visibilitychange', () => { if (document.hidden) store.flush(); else if (store.getState()?.onboarded) render({ keepScroll: true }); });
 
-if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-  navigator.serviceWorker.register('./sw.js').catch(() => {});
-}
+initUpdates();
+window.addEventListener('rehla:update', () => { if (store.getState()?.onboarded) render({ keepScroll: true }); });
 
 boot();
