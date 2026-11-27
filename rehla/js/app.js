@@ -8,10 +8,11 @@ import { promptInstall, hideBanner, isStandalone } from './install.js';
 import { initUpdates, applyUpdate } from './update.js';
 import * as cloud from './cloud.js';
 import { startSync, stopSync, flushSync } from './sync.js';
-import { consentBox } from './screens/auth.js';
+import { consentBox, resetAuthMode } from './screens/auth.js';
+import { resetOnboarding } from './screens/onboarding.js';
 import { systemNotify } from './notify.js';
 import * as db from './db.js';
-import { formError } from './ui.js';
+import { formError, backable, discardLayers } from './ui.js';
 import { esc } from './util.js';
 
 import home from './screens/home.js';
@@ -168,6 +169,7 @@ window.addEventListener('rehla:message', (e) => {
 });
 
 export async function startSession(session) {
+  discardLayers();
   const acc = auth.accounts().find((a) => a.id === session.id);
   if (session.cloud) {
     const user = cloud.currentUser();
@@ -192,6 +194,16 @@ export async function startSession(session) {
   unsub = store.subscribe(() => { applyTheme(); if (store.getState().onboarded) render({ keepScroll: true }); });
   if (!store.getState().onboarded) {
     nav.hidden = true;
+    // الرجوع من أول خطوة بيرجّعك لشاشة البداية (والبيانات بتفضل محفوظة)
+    resetOnboarding();
+    backable(async () => {
+      stopSync();
+      await store.flush();
+      if (!session.guest) { try { await cloud.logout(); } catch {} }
+      auth.logout();
+      resetAuthMode();
+      showAuth();
+    });
     const el = document.createElement('div');
     el.className = 'screen enter';
     el.innerHTML = onboarding.render();

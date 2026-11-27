@@ -1,10 +1,11 @@
 import * as auth from '../auth.js';
 import * as cloud from '../cloud.js';
 import { logo } from '../art.js';
-import { formError, toast } from '../ui.js';
+import { formError, toast, backable, closeTopSheet } from '../ui.js';
 import { esc } from '../util.js';
 
 let mode = 'welcome';
+export const resetAuthMode = () => { mode = 'welcome'; };
 const lastEmail = () => { try { return localStorage.getItem('rehla.lastEmail') || ''; } catch { return ''; } };
 
 export const CONSENT_TEXT = `رحلة فيها مشرفين بيتابعوا المشتركين عشان يساعدوهم ويدعموهم.
@@ -51,7 +52,16 @@ export default {
   },
   mount(el, onDone) {
     const rerender = () => { el.innerHTML = this.render(); this.mount(el, onDone); };
-    el.querySelectorAll('[data-m]').forEach((b) => (b.onclick = () => { mode = b.dataset.m; rerender(); }));
+    // زرار الرجوع في الموبايل بيرجّع خطوة جوه شاشات الدخول بدل ما يخرج من التطبيق
+    el.querySelectorAll('[data-m]').forEach((b) => (b.onclick = () => {
+      const to = b.dataset.m;
+      if (to === 'welcome' || (to === 'login' && mode === 'forgot')) { closeTopSheet(); return; }
+      if (mode === 'welcome' || to === 'forgot') {
+        const prev = mode;
+        backable(() => { mode = prev; rerender(); });
+      }
+      mode = to; rerender();
+    }));
     el.querySelector('[data-guest]')?.addEventListener('click', () => onDone(auth.loginGuest()));
     const ff = el.querySelector('#ff');
     if (ff) ff.onsubmit = async (e) => {

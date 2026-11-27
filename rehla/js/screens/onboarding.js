@@ -2,9 +2,10 @@ import { getState, update, flush } from '../store.js';
 import { today, uid, esc, num } from '../util.js';
 import { logo, art } from '../art.js';
 import { DEFAULT_HABITS } from '../data/content.js';
-import { formError } from '../ui.js';
+import { formError, backable, closeTopSheet, discardLayers } from '../ui.js';
 
 let step = 0;
+export const resetOnboarding = () => { step = 0; };
 const picked = new Set([0, 1, 3]);
 let quranGoal = 4;
 
@@ -34,12 +35,13 @@ export default {
       const n = el.querySelector('#n').value.trim();
       if (!n) return formError(f, 'اكتب اسمك عشان نعرف ننده عليك 😊');
       update((s) => { s.profile.name = n; }, { silent: true });
+      backable(() => { step = 0; rerender(); });
       step = 1; rerender();
     };
     el.querySelectorAll('[data-i]').forEach((b) => (b.onclick = () => { const i = +b.dataset.i; picked.has(i) ? picked.delete(i) : picked.add(i); rerender(); }));
     el.querySelectorAll('[data-q]').forEach((b) => (b.onclick = () => { quranGoal = +b.dataset.q; rerender(); }));
-    el.querySelector('[data-back]')?.addEventListener('click', () => { step--; rerender(); });
-    el.querySelector('[data-next]')?.addEventListener('click', () => { step = 2; rerender(); });
+    el.querySelector('[data-back]')?.addEventListener('click', () => closeTopSheet());
+    el.querySelector('[data-next]')?.addEventListener('click', () => { backable(() => { step = 1; rerender(); }); step = 2; rerender(); });
     el.querySelector('[data-finish]')?.addEventListener('click', async () => {
       update((s) => {
         s.settings.quranGoal = quranGoal;
@@ -53,6 +55,7 @@ export default {
       }, { silent: true });
       await flush();
       step = 0;
+      discardLayers();
       onDone();
     });
   },
