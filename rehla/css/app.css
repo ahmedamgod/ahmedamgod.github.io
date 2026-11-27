@@ -635,11 +635,6 @@ mark { background: var(--yellow); color: inherit; border-radius: 4px; padding: 0
 @keyframes wing { to { transform: scaleX(.6); } }
 @keyframes flutter { 50% { translate: 8px -6px; } }
 
-/* splash */
-#splash { position: fixed; inset: 0; z-index: 200; background: var(--bg); display: grid; place-items: center; transition: opacity .5s; }
-#splash.hide { opacity: 0; pointer-events: none; }
-.splash-in { display: flex; flex-direction: column; align-items: center; gap: 8px; animation: float 2s ease-in-out infinite; }
-.splash-in b { font-family: var(--f-brand); font-size: 2rem; color: var(--green-d); }
 
 @media (max-width: 360px) {
   .grid3 { gap: 6px; } .badges { grid-template-columns: repeat(2, 1fr); }

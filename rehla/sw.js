@@ -1,6 +1,6 @@
 // Service worker: التطبيق يشتغل أوفلاين بالكامل
 // غيّر الرقم ده (ومعاه APP_VERSION في js/update.js) مع كل إصدار جديد
-const VERSION = 'rehla-v1.4.3';
+const VERSION = 'rehla-v1.5.0';
 const CORE = [
   './', './index.html', './manifest.webmanifest', './css/app.css',
   './js/app.js', './js/db.js', './js/store.js', './js/auth.js', './js/util.js', './js/ui.js', './js/art.js',
@@ -11,17 +11,15 @@ const CORE = [
   './js/screens/mood.js', './js/screens/health.js', './js/screens/journey.js', './js/screens/achievements.js',
   './js/screens/reports.js', './js/screens/support.js', './js/screens/profile.js', './js/screens/notifications.js',
   './js/screens/auth.js', './js/screens/onboarding.js',
-  './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png',
+  './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/logo-full.png',
 ];
 
-// الإصدار الجديد بيستنى لحد ما المستخدم يدوس "حدّث دلوقتي"
+// الإصدار الجديد بيتحمّل كامل وبيشتغل على طول (التطبيق بيعرض "حدّث" عشان يفتح عليه)
 self.addEventListener('install', (e) => {
   e.waitUntil((async () => {
     const c = await caches.open(VERSION);
     await c.addAll(CORE.map((u) => new Request(u, { cache: 'reload' })));
-    // الإصدارات القديمة (قبل ١.٣) مكانش فيها زرار تحديث، فبنحدّثها على طول
-    const keys = await caches.keys();
-    if (keys.some((k) => /^rehla-v1\.([0-2]\.|4\.[01]$)/.test(k))) self.skipWaiting();
+    await self.skipWaiting();
   })());
 });
 
