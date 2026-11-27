@@ -12,8 +12,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="app.css?v=25">
-  <script src="config.js?v=25"></script>
+  <link rel="stylesheet" href="app.css?v=26">
+  <script src="config.js?v=26"></script>
   <script>
     // Firebase يتحمل بس لو الإعدادات موجودة
     if (window.HSE_CONFIG && window.HSE_CONFIG.firebase) {
@@ -23,10 +23,15 @@
     }
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-  <script src="store.js?v=25"></script>
-  <script src="idocr.js?v=25"></script>
+  <script src="store.js?v=26"></script>
+  <script src="idocr.js?v=26"></script>
 </head>
 <body>
+  <div id="splash" class="splash" aria-hidden="true">
+    <div class="logo-anim big"><span class="lg-ring"></span><svg class="logo-svg" viewBox="0 0 24 24" aria-hidden="true"><path class="lg-shield" pathLength="1" d="M12 2.5 20 6v5.5c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/><path class="lg-check" pathLength="1" d="m8.5 12 2.3 2.3 4.8-5"/></svg></div>
+    <div class="splash-title">متابعة التدريب</div>
+    <div class="credit">Created by Eng.Ahmed Amgad</div>
+  </div>
   <header class="topbar" id="topbar" hidden>
     <div class="brand">
       <span class="brand-icon" aria-hidden="true">
@@ -65,6 +70,6 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div id="printArea"></div>
 
-  <script src="app.js?v=25"></script>
+  <script src="app.js?v=26"></script>
 </body>
 </html>

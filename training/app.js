@@ -72,6 +72,9 @@
     bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>'
   };
   const icon = (n) => svgIcon(ICONS[n] || "");
+  const LOGO_SVG = '<svg class="logo-svg" viewBox="0 0 24 24" aria-hidden="true"><path class="lg-shield" pathLength="1" d="M12 2.5 20 6v5.5c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/><path class="lg-check" pathLength="1" d="m8.5 12 2.3 2.3 4.8-5"/></svg>';
+  const animLogo = (cls = "") => h("div", { class: "logo-anim " + cls, html: '<span class="lg-ring"></span>' + LOGO_SVG });
+  const credit = () => h("div", { class: "credit", dir: "ltr" }, "Created by Eng.Ahmed Amgad");
 
   const pad = (n) => String(n).padStart(2, "0");
   const today = () => U.todayStr();
@@ -859,8 +862,9 @@
     const err = h("div", { class: "hint err" });
     const btn = h("button", { class: "btn primary big", type: "submit" }, "دخول");
     setView(h("div", { class: "login" },
-      h("div", { class: "login-logo" }, icon("check")),
+      animLogo(),
       h("h1", null, "متابعة التدريب والمحاضرات"),
+      credit(),
       h("p", { class: "muted" }, CFG.siteName || ""),
       h("form", { class: "stack", onsubmit: async (e) => {
         e.preventDefault(); err.textContent = ""; busy(btn, true);
@@ -891,7 +895,7 @@
       try {
         await S.register({ username: username.value, password: pass.value, name: name.value.trim(), jobTitle: job.value.trim(), company: company.value.trim(), phone: ph });
         setView(h("div", { class: "login" },
-          h("div", { class: "login-logo" }, icon("check")),
+          animLogo(),
           h("h1", null, "طلبك اتبعت ✓"),
           h("p", { class: "muted" }, "الأدمن هيراجع طلبك. أول ما يوافق تقدر تدخل باسم المستخدم:"),
           h("p", { class: "strong", dir: "ltr" }, username.value.trim().toLowerCase()),
@@ -924,7 +928,8 @@
     const todayBox = h("div", { class: "card" }, h("h3", null, "محاضراتك النهارده"), h("div", { class: "muted" }, "بيحمّل..."));
     const reqBox = h("div");
     setView(pageTitle("أهلاً " + me.name, "النهارده " + fmtDate(today())), reqBox, tiles, todayBox, shareCard(),
-      h("button", { class: "btn", type: "button", style: "width:100%", onclick: startTour }, "❓ شرح التطبيق"));
+      h("button", { class: "btn", type: "button", style: "width:100%", onclick: startTour }, "❓ شرح التطبيق"),
+      h("div", { class: "app-footer" }, animLogo("tiny"), credit()));
     maybeTour();
     if (me.role === "master") {
       S.listUsers().then((us) => {
@@ -2057,9 +2062,14 @@
   $("#demoBanner").hidden = S.mode !== "demo";
   S.onAuth(() => route());
   S.init();
+  const splashStart = Date.now();
+  setTimeout(() => {
+    const sp = document.getElementById("splash"); if (!sp) return;
+    sp.classList.add("out"); setTimeout(() => sp.remove(), 600);
+  }, Math.max(0, 1700 - (Date.now() - splashStart)));
 
   /* ---------- update check: shows a banner when a newer version is published ---------- */
-  const APP_VERSION = 25;
+  const APP_VERSION = 26;
   async function hardReload() {
     try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map((r) => r.unregister())); } catch (e) {}
     try { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); } catch (e) {}

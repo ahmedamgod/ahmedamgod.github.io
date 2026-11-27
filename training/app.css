@@ -352,3 +352,33 @@ code.topic { flex: 1; padding: 10px; border-radius: 8px; background: var(--bg); 
 .tour-card h3 { margin: 0; color: var(--orange); }
 .tour-card p { margin: 0; line-height: 1.7; }
 .tour-skip { border: 0; background: transparent; color: var(--muted); text-decoration: underline; }
+
+/* ---------- animated logo & credit ---------- */
+.logo-anim { position: relative; width: 84px; height: 84px; margin: 0 auto; border-radius: 22px; background: var(--navy); border: 3px solid var(--orange); display: grid; place-items: center;
+  animation: lg-pop .7s cubic-bezier(.2, 1.4, .4, 1) both, lg-glow 2.8s ease-in-out 1.6s infinite; }
+.logo-anim .logo-svg { width: 56%; height: 56%; fill: none; stroke: var(--orange); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; overflow: visible; }
+.logo-anim .lg-shield { stroke-dasharray: 1; stroke-dashoffset: 1; animation: lg-draw .9s ease-out .25s forwards; }
+.logo-anim .lg-check { stroke-dasharray: 1; stroke-dashoffset: 1; stroke-width: 2.6; animation: lg-draw .45s ease-out 1.05s forwards; }
+.logo-anim .lg-ring { position: absolute; inset: -3px; border-radius: 22px; border: 2px solid var(--orange); opacity: 0; animation: lg-ring 2.8s ease-out 1.4s infinite; pointer-events: none; }
+.logo-anim.big { width: 120px; height: 120px; border-radius: 30px; }
+.logo-anim.big .lg-ring { border-radius: 30px; }
+.logo-anim.tiny { width: 36px; height: 36px; border-radius: 10px; border-width: 2px; margin: 0; animation: none; }
+.logo-anim.tiny .lg-ring { display: none; }
+@keyframes lg-draw { to { stroke-dashoffset: 0; } }
+@keyframes lg-pop { from { transform: scale(.4) rotate(-12deg); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes lg-ring { 0% { transform: scale(1); opacity: .7; } 70%, 100% { transform: scale(1.45); opacity: 0; } }
+@keyframes lg-glow { 0%, 100% { box-shadow: 0 0 0 rgba(245, 161, 29, 0); } 50% { box-shadow: 0 0 26px rgba(245, 161, 29, .45); } }
+
+.credit { font-family: "Segoe UI", system-ui, sans-serif; font-size: .72rem; letter-spacing: .4px; color: var(--muted); opacity: .85; direction: ltr; text-align: center; }
+.app-footer { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 22px 0 6px; opacity: .9; }
+
+.splash { position: fixed; inset: 0; z-index: 200; background: #08111f; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; transition: opacity .5s ease, visibility .5s; }
+.splash .splash-title { color: #fff; font-weight: 800; font-size: 1.3rem; opacity: 0; animation: lg-fade .5s ease 1.2s forwards; }
+.splash .credit { color: #aab4c3; opacity: 0; animation: lg-fade .5s ease 1.4s forwards; }
+.splash.out { opacity: 0; visibility: hidden; }
+@keyframes lg-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: .9; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .logo-anim, .logo-anim *, .splash * { animation-duration: .01ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; }
+}
+.logo-anim.tiny .lg-shield, .logo-anim.tiny .lg-check { animation: none; stroke-dashoffset: 0; }
