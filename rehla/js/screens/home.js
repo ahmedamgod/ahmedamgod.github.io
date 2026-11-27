@@ -1,7 +1,7 @@
 import { getState, update, day, peekDay } from '../store.js';
-import { today, fmtDate, greeting, num, esc, hashStr, fmtTime, relDay } from '../util.js';
-import { logo, heroScene, art, icon } from '../art.js';
-import { ring, celebrate, sheet, toast } from '../ui.js';
+import { today, fmtDate, greeting, num, esc, hashStr, fmtTime } from '../util.js';
+import { logo, art, icon, solid } from '../art.js';
+import { celebrate, sheet, toast, progressBar } from '../ui.js';
 import * as S from '../stats.js';
 import { DAILY_DHIKR } from '../data/azkar.js';
 import { MESSAGES, MOODS, PRAYERS } from '../data/content.js';
@@ -11,34 +11,36 @@ let msgShift = 0;
 
 const dailyDhikr = () => DAILY_DHIKR[hashStr(today()) % DAILY_DHIKR.length];
 
-function cardInfo() {
+// شارة صغيرة فوق كل كارت بحالة النهارده
+function cardBadges() {
   const s = getState();
   const k = today();
   const d = peekDay(k);
   const prayers = Object.keys(d.prayers || {}).length;
   const due = s.habits.filter((h) => S.habitDue(h, k));
   const hd = due.filter((h) => S.habitDone(h, k)).length;
-  const lastJ = s.journal[0];
-  const lastMood = s.moods.find((m) => m.date === k);
-  const mo = lastMood && MOODS.find((m) => m.id === lastMood.mood);
-  const activeGoals = s.goals.filter((g) => !g.done).length + s.challenges.filter((c) => !c.done).length;
+  const wroteToday = s.journal.some((j) => j.date === k);
+  const mood = s.moods.find((m) => m.date === k);
+  const mo = mood && MOODS.find((m) => m.id === mood.mood);
+  const active = s.goals.filter((g) => !g.done).length + s.challenges.filter((c) => !c.done && !c.ended).length;
   return {
-    worship: `${num(prayers)}/${num(5)} صلوات`,
-    habits: due.length ? `${num(hd)} من ${num(due.length)} النهارده` : 'ضيف أول عادة',
-    journal: lastJ ? 'آخر تدوينة ' + relDay(lastJ.date) : 'اكتب أول صفحة',
-    emotions: mo ? `${mo.emoji} ${mo.label}` : 'حاسس بإيه؟',
-    health: `💧 ${num(d.water || 0)}/${num(s.settings.waterGoal)}`,
-    journey: activeGoals ? `${num(activeGoals)} شغالين` : 'حط هدف جديد',
+    worship: [`${num(prayers)}/${num(5)}`, prayers === 5],
+    habits: due.length ? [`${num(hd)}/${num(due.length)}`, hd === due.length] : null,
+    journal: wroteToday ? ['✓', true] : null,
+    emotions: mo ? [mo.emoji, true] : null,
+    health: [`💧${num(d.water || 0)}`, (d.water || 0) >= s.settings.waterGoal],
+    journey: active ? [num(active), false] : null,
   };
 }
 
+// نفس ترتيب الصورة المرجعية (من اليمين للشمال)
 const CARDS = [
-  ['worship', 'عباداتي', 'worship', 'c-green'],
-  ['habits', 'عاداتي', 'habits', 'c-yellow'],
-  ['journal', 'يومياتي', 'journal', 'c-blue'],
-  ['mood', 'مشاعري', 'emotions', 'c-pink'],
-  ['health', 'صحتي ولياقتي', 'health', 'c-sky'],
-  ['journey', 'رحلتي', 'journey', 'c-peach'],
+  ['journal', 'يومياتي', 'journal', 'k-pink'],
+  ['habits', 'عاداتي', 'habits', 'k-cream'],
+  ['worship', 'عباداتي', 'worship', 'k-peach'],
+  ['journey', 'رحلتي', 'journey', 'k-yellow'],
+  ['health', 'صحتي ولياقتي', 'health', 'k-blue'],
+  ['mood', 'مشاعري', 'emotions', 'k-rose'],
 ];
 
 export default {
@@ -51,7 +53,8 @@ export default {
     const pts = S.totalPoints();
     const streak = S.streak();
     const missed = S.missedRecent();
-    const info = cardInfo();
+    const good = S.successfulDays();
+    const badges = cardBadges();
     const unread = s.notifications.filter((n) => !n.read).length;
     const dz = dailyDhikr();
     const target = d.dhikr?.target || dz.count;
@@ -63,55 +66,55 @@ export default {
     const lvl = S.level(pts);
 
     return `
-    <section class="home-top">
-      ${heroScene()}
-      <div class="topbar">
-        <div class="brand">${logo(46)}<div><b>رحلة</b><small>خطوة كل يوم</small></div></div>
-        <div class="row gap-s">
-          <a href="#/notifications" class="icon-btn soft" aria-label="الإشعارات${unread ? ' — ' + unread + ' جديدة' : ''}">${icon('bell')}${unread ? `<span class="badge-dot">${num(Math.min(unread, 99))}</span>` : ''}</a>
-          <a href="#/profile/settings" class="icon-btn soft" aria-label="الإعدادات">${icon('gear')}</a>
-        </div>
-      </div>
-      <div class="greet">
-        <h1>${greeting()}${name ? ' يا ' + esc(name) : ''} 🌿</h1>
-        <p>${fmtDate(k)}</p>
-      </div>
+    <section class="home-head">
+      <a href="#/notifications" class="round-btn" aria-label="الإشعارات${unread ? ' — ' + unread + ' جديدة' : ''}">${solid('bell', 26)}${unread ? `<span class="badge-dot">${num(Math.min(unread, 99))}</span>` : ''}</a>
+      <div class="hh-logo">${logo(190, true)}</div>
+      <a href="#/profile/settings" class="round-btn" aria-label="الإعدادات">${solid('gear', 26)}</a>
+    </section>
+    <p class="hello">${greeting()}${name ? ' يا ' + esc(name) : ''} 🌿 <span>${fmtDate(k)}</span></p>
+
+    <section class="hh-cards">
+      <a href="#/achievements" class="days-card">
+        <small>أيام النجاح الكاملة</small>
+        <div class="dc-num"><b>${num(good)}</b><span class="star">⭐</span></div>
+        <small class="dc-miss"><i>!</i> واللي فاتوا: ${num(missed)}</small>
+      </a>
+      <div class="bubble-card"><p>كل يوم خطوة صغيرة..<br>تقربك من النسخة الأجمل من نفسك <span class="hrt">🤍</span></p></div>
     </section>
 
-    <section class="card summary">
-      <div class="sum-ring">${ring(comp, 84, 9)}<small>إنجاز النهارده</small></div>
-      <div class="sum-grid">
-        <a href="#/achievements" class="sum-item"><span class="si-ic y">⭐</span><b>${num(pts)}</b><small>نقطة · ${lvl.icon} ${lvl.name}</small></a>
-        <a href="#/achievements" class="sum-item"><span class="si-ic p">🔥</span><b>${num(streak)}</b><small>يوم ورا بعض</small></a>
-        <a href="#/reports" class="sum-item"><span class="si-ic b">🌧️</span><b>${num(missed)}</b><small>فاتوا الأسبوع ده</small></a>
-        <div class="sum-item"><span class="si-ic g">✅</span><b>${num(items.length - left.length)}/${num(items.length)}</b><small>مهام النهارده</small></div>
-      </div>
-    </section>
+    <a href="#/reports" class="today-strip">
+      <div class="ts-row"><b>إنجاز النهارده ${num(Math.round(comp * 100))}٪</b><span>${num(items.length - left.length)}/${num(items.length)} مهام</span></div>
+      ${progressBar(comp)}
+      <div class="ts-row small"><span>🔥 ${num(streak)} يوم ورا بعض</span><span>⭐ ${num(pts)} نقطة · ${lvl.icon} ${lvl.name}</span></div>
+    </a>
 
-    <section class="grid2 features">
-      ${CARDS.map(([route, title, a, c], i) => `
-        <a href="#/${route}" class="feature ${c}" style="--i:${i}">
+    <section class="grid3 features">
+      ${CARDS.map(([route, title, a, c], i) => {
+        const b = badges[a];
+        return `<a href="#/${route}" class="feature ${c}" style="--i:${i}">
+          ${b ? `<span class="f-badge ${b[1] ? 'ok' : ''}">${b[0]}</span>` : ''}
           <div class="f-art">${art(a)}</div>
-          <b>${title}</b><small>${info[a]}</small>
-        </a>`).join('')}
+          <div class="f-foot"><b>${title}</b><span class="chev">${icon('back', 14)}</span></div>
+        </a>`;
+      }).join('')}
     </section>
 
-    <section class="card dhikr ${count >= target ? 'done' : ''}" id="dhikr-card">
-      <div class="row between"><h2>ذكر النهارده 📿</h2><button class="link" data-act="target">الهدف: ${num(target)} ✎</button></div>
-      <p class="dhikr-text">${esc(dz.text)}</p>
-      <p class="ref">${esc(dz.ref)}</p>
-      <div class="dhikr-row">
-        <button class="counter-btn" data-act="tap" aria-label="عدّ">
-          <svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="44" stroke="var(--track)" stroke-width="7" fill="none"/>
-          <circle class="cprog" cx="50" cy="50" r="44" stroke="var(--green)" stroke-width="7" fill="none" stroke-linecap="round" stroke-dasharray="276.5" stroke-dashoffset="${276.5 * (1 - Math.min(1, count / target))}" transform="rotate(-90 50 50)"/></svg>
-          <span class="cnum">${num(count)}</span><small>من ${num(target)}</small>
-        </button>
-        <div class="col gap-s">
-          <button class="btn primary" data-act="focus">${icon('play', 18)} ابدأ</button>
-          <button class="btn ghost" data-act="reset">${icon('reset', 18)} من الأول</button>
-        </div>
+    <section class="card dhikr-card ${count >= target ? 'done' : ''}" id="dhikr-card">
+      <div class="dk-art">${art('lotus')}</div>
+      <div class="dk-body">
+        <h2>أذكاري اليوم <span class="fl">🌸</span></h2>
+        <p class="dk-text">${esc(dz.text)}</p>
+        <p class="dk-count">(${num(target)} مرة)</p>
+        <button class="btn primary pill" data-act="focus">${icon('play', 16)} ${count ? 'كمّل' : 'ابدأ الآن'}</button>
+      </div>
+      <div class="dk-progress">
+        ${progressBar(count / target)}
+        <div class="row between small"><span class="dk-n"><b class="cnum">${num(count)}</b> من ${num(target)}</span>
+          <span class="row gap-s"><button class="link" data-act="target">الهدف ✎</button><button class="link" data-act="reset">${icon('reset', 14)} من الأول</button></span></div>
       </div>
     </section>
+
+    <button class="motivate-pill" data-act="msg" aria-label="رسالة تانية"><span class="dash r"></span>${esc(msg)} <span class="hrt">❤️</span><span class="dash l"></span></button>
 
     <section class="card next-prayer">
       <div><small>الصلاة الجاية</small><b>${np.emoji} ${np.name}</b></div>
@@ -121,15 +124,9 @@ export default {
 
     ${left.length ? `<section class="card">
       <div class="row between"><h2>فاضلك النهارده</h2><small class="muted">${num(left.length)} حاجات</small></div>
-      <ul class="todo">${left.slice(0, 6).map((it) => `<li><a href="#/${linkFor(it)}"><span class="dot g-${it.group}"></span>${esc(it.label)}<span class="go">${icon('back', 16)}</span></a></li>`).join('')}</ul>
-      ${left.length > 6 ? `<p class="muted small center">و${num(left.length - 6)} كمان…</p>` : ''}
+      <ul class="todo">${left.slice(0, 5).map((it) => `<li><a href="#/${linkFor(it)}"><span class="dot g-${it.group}"></span>${esc(it.label)}<span class="go">${icon('back', 16)}</span></a></li>`).join('')}</ul>
+      ${left.length > 5 ? `<p class="muted small center">و${num(left.length - 5)} كمان…</p>` : ''}
     </section>` : `<section class="card all-done">🌸 خلّصت كل مهام النهارده! يوم جميل.</section>`}
-
-    <section class="card motivate">
-      <span class="quote">“</span>
-      <p>${esc(msg)}</p>
-      <button class="link" data-act="msg">رسالة تانية ↻</button>
-    </section>
 
     ${s.settings.assistant ? `<a class="card assistant-teaser" href="#/support/assistant">
       <span class="as-ic">${icon('spark', 24)}</span><div><b>مساعدك الشخصي</b><small>ملخص يومك واقتراحات على قدّك</small></div><span class="go">${icon('back', 18)}</span>
@@ -145,12 +142,12 @@ export default {
       const t = d.dhikr?.target || dz.count;
       const c = d.dhikr?.count || 0;
       card.querySelector('.cnum').textContent = num(c);
-      card.querySelector('.cprog').style.strokeDashoffset = 276.5 * (1 - Math.min(1, c / t));
+      card.querySelector('.pbar span').style.width = Math.min(100, (c / t) * 100) + '%';
       card.classList.toggle('done', c >= t);
     };
     const tap = () => {
       let reached = false;
-      update((s) => {
+      update(() => {
         const d = day();
         d.dhikr ||= { count: 0, target: dz.count };
         d.dhikr.count++;
@@ -158,16 +155,12 @@ export default {
       }, { silent: true });
       navigator.vibrate?.(8);
       paint();
-      const b = card.querySelector('.counter-btn');
-      b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
       if (reached) celebrate('ما شاء الله! كمّلت ذكر النهارده 📿');
-      return reached;
     };
     el.addEventListener('click', (e) => {
       const a = e.target.closest('[data-act]')?.dataset.act;
       if (!a) return;
-      if (a === 'tap') tap();
-      if (a === 'reset') { update((s) => { const d = day(); d.dhikr = { count: 0, target: d.dhikr?.target || dz.count, done: d.dhikr?.done }; }, { silent: true }); paint(); toast('رجعنا للصفر 🌱'); }
+      if (a === 'reset') { update(() => { const d = day(); d.dhikr = { count: 0, target: d.dhikr?.target || dz.count, done: d.dhikr?.done }; }, { silent: true }); paint(); toast('رجعنا للصفر 🌱'); }
       if (a === 'msg') { msgShift++; update(() => {}); }
       if (a === 'target') targetSheet(dz);
       if (a === 'focus') focusMode(dz, tap);
@@ -206,15 +199,21 @@ function targetSheet(dz) {
 function focusMode(dz, tap) {
   const ov = document.createElement('div');
   ov.className = 'focus-mode';
+  const R = 120, C = 2 * Math.PI * R;
   const paint = () => {
     const d = peekDay(today());
-    ov.querySelector('.fm-num').textContent = num(d.dhikr?.count || 0);
-    ov.querySelector('.fm-of').textContent = 'من ' + num(d.dhikr?.target || dz.count);
+    const t = d.dhikr?.target || dz.count, c = d.dhikr?.count || 0;
+    ov.querySelector('.fm-num').textContent = num(c);
+    ov.querySelector('.fm-of').textContent = 'من ' + num(t);
+    ov.querySelector('.fm-ring').style.strokeDashoffset = C * (1 - Math.min(1, c / t));
   };
   ov.innerHTML = `<button class="icon-btn fm-close" aria-label="قفل">${icon('x')}</button>
     <p class="dhikr-text">${esc(dz.text)}</p>
-    <div class="fm-num">٠</div><div class="fm-of"></div>
-    <p class="muted">اضغط في أي حتة عشان تعدّ</p>`;
+    <button class="fm-tap" aria-label="عدّ">
+      <svg viewBox="0 0 260 260" aria-hidden="true"><circle cx="130" cy="130" r="${R}" stroke="var(--track)" stroke-width="12" fill="none"/>
+      <circle class="fm-ring" cx="130" cy="130" r="${R}" stroke="var(--green)" stroke-width="12" fill="none" stroke-linecap="round" stroke-dasharray="${C}" transform="rotate(-90 130 130)"/></svg>
+      <span class="fm-num">٠</span><span class="fm-of"></span></button>
+    <p class="muted">اضغط على الدايرة أو في أي حتة عشان تعدّ</p>`;
   document.body.appendChild(ov);
   paint();
   ov.addEventListener('click', (e) => {

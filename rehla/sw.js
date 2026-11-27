@@ -1,5 +1,5 @@
 // Service worker: التطبيق يشتغل أوفلاين بالكامل
-const VERSION = 'rehla-v1.0.0';
+const VERSION = 'rehla-v1.1.0';
 const CORE = [
   './', './index.html', './manifest.webmanifest', './css/app.css',
   './js/app.js', './js/db.js', './js/store.js', './js/auth.js', './js/util.js', './js/ui.js', './js/art.js',

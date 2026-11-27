@@ -1,7 +1,7 @@
 import * as store from './store.js';
 import * as auth from './auth.js';
 import { setDigits } from './util.js';
-import { icon } from './art.js';
+import { solid, scene } from './art.js';
 import { toast, closeTopSheet } from './ui.js';
 import { startScheduler } from './notify.js';
 
@@ -21,12 +21,13 @@ import authScreen from './screens/auth.js';
 import onboarding from './screens/onboarding.js';
 
 const ROUTES = { home, worship, habits, journal, mood, health, journey, achievements, reports, support, profile, notifications };
+// نفس ترتيب الصورة المرجعية: حسابي على اليمين وإنجازاتي على الشمال
 const TABS = [
-  ['achievements', 'إنجازاتي', 'trophy'],
-  ['reports', 'تقاريري', 'chart'],
-  ['home', 'الرئيسية', 'home'],
-  ['support', 'الدعم', 'heart'],
   ['profile', 'حسابي', 'user'],
+  ['support', 'الدعم', 'heart'],
+  ['home', 'الرئيسية', 'home'],
+  ['reports', 'تقاريري', 'chart'],
+  ['achievements', 'إنجازاتي', 'trophy'],
 ];
 
 const main = document.getElementById('main');
@@ -45,8 +46,9 @@ function renderNav(name) {
   const isTab = TABS.some(([n]) => n === name);
   nav.hidden = !isTab;
   document.body.classList.toggle('has-nav', isTab);
+  document.body.dataset.route = name;
   nav.innerHTML = TABS.map(([n, l, ic]) => `<a href="#/${n}" class="${n === name ? 'on' : ''} ${n === 'home' ? 'home-tab' : ''}" ${n === name ? 'aria-current="page"' : ''}>
-    <span class="nav-ic">${icon(ic, n === 'home' ? 26 : 22)}</span><span>${l}</span></a>`).join('');
+    <span class="nav-ic">${solid(ic, n === 'home' ? 30 : 26)}</span><span class="nav-l">${l}</span></a>`).join('');
 }
 
 export function render({ keepScroll = false } = {}) {
@@ -129,6 +131,7 @@ export function showAuth() {
 }
 
 async function boot() {
+  document.getElementById('scene').innerHTML = scene();
   document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   const s = auth.currentSession();
   if (s && (s.guest || auth.accounts().some((a) => a.id === s.id))) await startSession(s);

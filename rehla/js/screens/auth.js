@@ -1,5 +1,5 @@
 import * as auth from '../auth.js';
-import { logo, heroScene } from '../art.js';
+import { logo } from '../art.js';
 import { formError } from '../ui.js';
 import { esc } from '../util.js';
 
@@ -9,8 +9,8 @@ export default {
   render() {
     const accs = auth.accounts();
     return `<section class="auth">
-      <div class="auth-hero">${heroScene()}<div class="auth-logo">${logo(92)}</div></div>
-      <h1 class="brand-title">رحلة</h1>
+      <div class="auth-logo">${logo(220, true)}</div>
+      <h1 class="sr-only">رحلة</h1>
       <p class="brand-sub">كل يوم خطوة صغيرة تقربك من النسخة الأحلى منك 🌱</p>
       ${mode === 'welcome' ? `<div class="col gap auth-actions">
         <button class="btn primary block lg" data-m="register">ابدأ رحلتك</button>
