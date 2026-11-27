@@ -24,7 +24,12 @@ export function currentSession() {
   try { return JSON.parse(localStorage.getItem(SES)); } catch { return null; }
 }
 function setSession(s) { localStorage.setItem(SES, JSON.stringify(s)); }
-export function logout() { localStorage.removeItem(SES); }
+export function logout() { localStorage.removeItem(SES); localStorage.removeItem(CU); }
+
+// آخر حساب (Firebase) دخل على الجهاز — عشان التطبيق يفتح على طول من غير ما يستنى النت
+const CU = 'rehla.cloudUser';
+export function rememberCloudUser(u) { try { localStorage.setItem(CU, JSON.stringify({ uid: u.uid, email: u.email || '', name: u.displayName || u.name || '' })); } catch {} }
+export function cachedCloudUser() { try { return JSON.parse(localStorage.getItem(CU)); } catch { return null; } }
 
 export const validEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
 

@@ -183,19 +183,43 @@ export async function startSession(session) {
   discardLayers();
   const acc = auth.accounts().find((a) => a.id === session.id);
   if (session.cloud) {
-    const user = cloud.currentUser();
-    // بيانات المستخدم على السيرفر + الموافقة
-    const doc = await withTimeout(cloud.getUserDoc(user.uid).catch(() => 'offline'), 8000);
-    if (doc && doc !== 'offline' && doc !== 'timeout' && doc.disabled) return showDisabled();
-    if (doc === null || (doc && typeof doc === 'object' && !doc.consentAt)) await consentGate(user);
-    await store.load(user.uid, user.displayName || doc?.name || '');
-    // لو كان عنده حساب قديم على الجهاز بنفس الإيميل، ننقل بياناته
+    const real = cloud.currentUser();
+    const user = real || { uid: session.id, email: session.email || '', displayName: session.name || '' };
+    if (real) auth.rememberCloudUser(real);
+    // ١. نفتح على طول من البيانات المحفوظة على الموبايل
+    await store.load(user.uid, user.displayName || '');
     if (!store.getState().onboarded) {
+      // لو كان عنده حساب قديم على الجهاز بنفس الإيميل، ننقل بياناته
       const old = auth.accounts().find((a) => a.email === (user.email || '').toLowerCase());
       const oldState = old && (await db.get('state:' + old.id));
       if (oldState?.onboarded) await store.replaceState(oldState);
     }
-    await withTimeout(startSync(user.uid), 10000);
+    // ٢. السيرفر: حالة الحساب + المزامنة
+    const docP = cloud.getUserDoc(user.uid).catch(() => 'offline');
+    const checkDoc = async (doc) => {
+      if (doc && typeof doc === 'object' && doc.disabled) { showDisabled(); return false; }
+      if (doc === null || (doc && typeof doc === 'object' && !doc.consentAt)) { await consentGate(user); return 'consent'; }
+      return true;
+    };
+    if (!real) {
+      // لسه Firebase بيتأكد من الدخول (نت بطيء): نفتح من البيانات المحفوظة، ونتأكد في الخلفية
+      cloud.firstUser().then((u) => {
+        if (!u) { auth.logout(); stopSync(); resetAuthMode(); showAuth(); return; }
+        if (u.uid !== user.uid) { location.reload(); return; }
+        auth.rememberCloudUser(u);
+        startSync(u.uid);
+        docP.then(async (doc) => { const r = await checkDoc(doc); if (r === 'consent') render(); });
+      });
+    } else if (!store.getState().onboarded) {
+      // أول مرة على الجهاز ده: نستنى السيرفر شوية عشان لو عنده بيانات قبل كده منطلبش منه يبدأ من الأول
+      const doc = await withTimeout(docP, 6000);
+      if ((await checkDoc(doc)) === false) return;
+      await withTimeout(startSync(user.uid), 6000);
+    } else {
+      // بيفتح على طول، والسيرفر في الخلفية
+      startSync(user.uid);
+      docP.then(async (doc) => { const r = await checkDoc(doc); if (r === 'consent') render(); });
+    }
   } else {
     stopSync();
     await store.load(session.id, acc?.name || '');
@@ -253,8 +277,10 @@ async function boot() {
   const s = auth.currentSession();
   if (s?.guest) await startSession(s);
   else {
-    const user = await withTimeout(cloud.firstUser(), 8000);
+    const cached = auth.cachedCloudUser();
+    const user = await withTimeout(cloud.firstUser(), cached ? 1500 : 6000);
     if (user && user !== 'timeout') await startSession({ id: user.uid, guest: false, email: user.email, cloud: true });
+    else if (cached?.uid) await startSession({ id: cached.uid, guest: false, email: cached.email, name: cached.name, cloud: true });
     else showAuth();
   }
   document.getElementById('splash')?.classList.add('hide');
