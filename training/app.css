@@ -40,7 +40,7 @@ body {
   color: var(--text);
   font-size: 16px;
   line-height: 1.55;
-  min-height: 100vh;
+  min-height: calc(100vh / var(--z, 1));
   padding-bottom: calc(76px + env(safe-area-inset-bottom));
 }
 body.noscroll { overflow: hidden; }
@@ -206,7 +206,7 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 6px 0; }
 .qr-preview svg { width: 100%; height: 100%; }
 
 /* ---------- login ---------- */
-.login { max-width: 380px; margin: 8vh auto 0; text-align: center; display: flex; flex-direction: column; gap: 10px; }
+.login { max-width: 380px; margin: calc(8vh / var(--z, 1)) auto 0; text-align: center; display: flex; flex-direction: column; gap: 10px; }
 .login h1 { margin-top: 6px; }
 .login form { margin-top: 14px; text-align: start; }
 .login-logo { width: 72px; height: 72px; margin: 0 auto; border-radius: 20px; background: var(--navy); color: var(--orange); display: grid; place-items: center; border: 3px solid var(--orange); }
@@ -226,7 +226,7 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 6px 0; }
 /* ---------- modal ---------- */
 .modal { position: fixed; inset: 0; z-index: 50; background: rgba(5, 10, 20, .6); display: flex; align-items: flex-end; justify-content: center; }
 .modal[hidden] { display: none; }
-.modal-card { background: var(--bg); width: 100%; max-width: 640px; max-height: 92vh; border-radius: 18px 18px 0 0; display: flex; flex-direction: column; }
+.modal-card { background: var(--bg); width: 100%; max-width: 640px; max-height: calc(92vh / var(--z, 1)); border-radius: 18px 18px 0 0; display: flex; flex-direction: column; }
 @media (min-width: 700px) { .modal { align-items: center; } .modal-card { border-radius: 18px; } }
 .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); gap: 10px; }
 .modal-head h3 { margin: 0; }
@@ -384,3 +384,13 @@ code.topic { flex: 1; padding: 10px; border-radius: 8px; background: var(--bg); 
 .logo-anim.tiny .lg-shield, .logo-anim.tiny .lg-check { animation: none; stroke-dashoffset: 0; }
 .desk-warn { position: fixed; top: 0; inset-inline: 0; z-index: 150; background: var(--orange); color: #1b1200; font-size: 28px; line-height: 1.5; padding: 18px 60px 18px 18px; font-weight: 700; }
 .desk-warn button { position: absolute; top: 12px; inset-inline-end: 12px; font-size: 28px; background: transparent; border: 0; cursor: pointer; }
+
+/* ---------- home fills the screen ---------- */
+.home { display: flex; flex-direction: column; min-height: calc(100vh / var(--z, 1) - 150px); }
+.home .app-footer { margin-top: auto; padding-top: 22px; }
+.home-stats { grid-template-columns: repeat(3, 1fr) !important; }
+.home-stats .stat { padding: 10px 6px; }
+.home-stats .stat-l { font-size: .74rem; }
+.tile { min-height: 132px; justify-content: space-between; }
+.share-body .stack { min-width: 0; }
+.share-body .stack [dir="ltr"] { overflow-wrap: anywhere; word-break: break-all; }

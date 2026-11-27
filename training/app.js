@@ -927,9 +927,12 @@
     );
     const todayBox = h("div", { class: "card" }, h("h3", null, "محاضراتك النهارده"), h("div", { class: "muted" }, "بيحمّل..."));
     const reqBox = h("div");
-    setView(pageTitle("أهلاً " + me.name, "النهارده " + fmtDate(today())), reqBox, tiles, todayBox, shareCard(),
+    const sv = (n, l) => h("div", { class: "stat" }, h("div", { class: "stat-n" }, n), h("div", { class: "stat-l" }, l));
+    const statsBox = h("div", { class: "stats home-stats" }, sv("…", "محاضرة النهارده"), sv("…", "حضور النهارده"), sv("…", "اندكشن النهارده"));
+    setView(h("div", { class: "home" },
+      pageTitle("أهلاً " + me.name, "النهارده " + fmtDate(today())), reqBox, statsBox, tiles, todayBox, shareCard(),
       h("button", { class: "btn", type: "button", style: "width:100%", onclick: startTour }, "❓ شرح التطبيق"),
-      h("div", { class: "app-footer" }, animLogo("tiny"), credit()));
+      h("div", { class: "app-footer" }, animLogo("tiny"), credit())));
     maybeTour();
     if (me.role === "master") {
       S.listUsers().then((us) => {
@@ -939,7 +942,12 @@
       }).catch(() => {});
     }
     try {
-      const mine = await myTodaySessions();
+      const all = await S.listSessionsByDate(today());
+      const mine = all.filter((x) => isMine(x, me));
+      const daily = all.filter((x) => x.type === "daily"), ind = all.filter((x) => x.type === "induction");
+      const sum = (l) => l.reduce((t, x) => t + (x.count || 0), 0);
+      statsBox.innerHTML = "";
+      statsBox.append(sv(String(daily.length), "محاضرة النهارده"), sv(String(sum(daily)), "حضور النهارده"), sv(String(sum(ind)), "اندكشن النهارده"));
       todayBox.innerHTML = ""; todayBox.appendChild(h("h3", null, "محاضراتك النهارده"));
       if (!mine.length) todayBox.appendChild(h("div", { class: "empty" }, "لسه مدّيتش محاضرات النهارده"));
       mine.forEach((s) => todayBox.appendChild(sessionRow(s)));
@@ -2072,7 +2080,7 @@
   }, Math.max(0, 1700 - (Date.now() - splashStart)));
 
   /* ---------- update check: shows a banner when a newer version is published ---------- */
-  const APP_VERSION = 28;
+  const APP_VERSION = 29;
   async function hardReload() {
     try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map((r) => r.unregister())); } catch (e) {}
     try { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); } catch (e) {}
