@@ -1,5 +1,5 @@
 // التحديثات: لما ينزل إصدار جديد بيظهر شريط "فيه تحديث جديد"، وتقدر كمان تدوّر يدوي من الإعدادات
-export const APP_VERSION = '1.3.1';
+export const APP_VERSION = '1.4.0';
 
 let reg = null;
 let waiting = null;
@@ -26,6 +26,7 @@ export async function initUpdates() {
   try {
     reg = await navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' });
   } catch { return; }
+  if (!reg) return;
   if (reg.waiting && navigator.serviceWorker.controller) setWaiting(reg.waiting);
   track(reg.installing);
   reg.addEventListener('updatefound', () => track(reg.installing));

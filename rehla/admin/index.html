@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>لوحة إدارة رحلة</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#FFF9EB">
+  <link rel="icon" href="../icons/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@400;500;600;700;800&family=Marhey:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css">
+  <link rel="stylesheet" href="admin.css">
+  <script>
+    (function () {
+      var w = innerWidth, sw = screen.width, touch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+      var z = touch && sw && w > sw * 1.25 ? w / sw : 1;
+      if (z !== 1) document.documentElement.style.zoom = z.toFixed(3);
+      document.documentElement.style.setProperty('--z', z.toFixed(3));
+    })();
+  </script>
+</head>
+<body class="admin">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+    <filter id="wcs"><feTurbulence type="fractalNoise" baseFrequency="0.08" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.5"/></filter>
+    <filter id="wc"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="3" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="7"/></filter>
+  </defs></svg>
+  <main id="main" class="admin-main"><div class="empty"><p>لحظة…</p></div></main>
+  <div id="toasts" aria-live="polite"></div>
+  <script type="module" src="admin.js"></script>
+</body>
+</html>

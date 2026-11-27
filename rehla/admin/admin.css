@@ -1,0 +1,46 @@
+/* لوحة الإدارة — نفس هوية رحلة */
+body.admin { background: var(--bg); }
+.admin-main { max-width: 760px; padding-bottom: 40px; }
+.ad-head { display: flex; align-items: center; justify-content: space-between; padding: calc(10px + env(safe-area-inset-top)) 0 8px; }
+.ad-head b { display: block; font-size: 1.05rem; color: var(--green-d); }
+.ad-head small { color: var(--muted); font-size: .78rem; }
+.ad-tabs { display: flex; gap: 6px; overflow-x: auto; position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 90%, transparent); backdrop-filter: blur(8px); padding: 6px 0; scrollbar-width: none; }
+.ad-tabs a { display: flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); white-space: nowrap; font-weight: 700; font-size: .88rem; color: var(--ink2); }
+.ad-tabs a.on { background: var(--green); color: #fff; border-color: var(--green); }
+.ad-kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 12px 0; }
+@media (min-width: 600px) { .ad-kpis { grid-template-columns: repeat(4, 1fr); } }
+.kpi { margin: 0; text-align: center; padding: 12px 8px; }
+.kpi span { font-size: 1.4rem; display: block; }
+.kpi b { font-size: 1.7rem; font-weight: 800; color: var(--green-d); display: block; line-height: 1.2; }
+.kpi small { color: var(--ink2); font-size: .8rem; display: block; }
+.kpi em { font-style: normal; font-size: .72rem; color: var(--green-d); background: var(--green-l); border-radius: 999px; padding: 0 8px; }
+.kpi.warn b { color: #C46A2B; }
+.ad-list { list-style: none; padding: 0; margin: 8px 0; }
+.ad-list.card { padding: 4px 12px; }
+.ad-list li { border-bottom: 1px dashed var(--line); }
+.ad-list li:last-child { border: 0; }
+.ad-user { display: flex; align-items: center; gap: 10px; padding: 10px 0; }
+.ad-av { width: 44px; height: 44px; border-radius: 50%; background: var(--green-l); color: var(--green-d); display: grid; place-items: center; font-weight: 800; flex-shrink: 0; overflow: hidden; }
+.ad-av img { width: 100%; height: 100%; object-fit: cover; }
+.ad-av.lg { width: 64px; height: 64px; font-size: 1.5rem; }
+.ad-mini { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.ad-mini small { font-size: .72rem; color: var(--ink2); white-space: nowrap; }
+.tag { display: inline-block; border-radius: 999px; padding: 0 8px; font-size: .72rem; font-weight: 700; margin: 2px 0 0 4px; }
+.tag.red { background: #FBE0E3; color: #B54255; } .tag.orange { background: #FCEBD8; color: #A65E1E; } .tag.gray { background: var(--track); color: var(--ink2); }
+.ad-profile { display: flex; align-items: flex-start; gap: 12px; }
+.ad-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 10px; }
+.ad-utabs { overflow-x: auto; }
+.ad-utabs a { flex: 0 0 auto; padding: 8px 12px; border-radius: 12px; color: var(--ink2); font-size: .86rem; white-space: nowrap; }
+.ad-utabs a.on { background: var(--card); color: var(--green-d); font-weight: 700; box-shadow: var(--shadow); }
+.ad-journal h3 { margin: 4px 0 8px; }
+.ad-pgrid { display: grid; grid-template-columns: 52px repeat(14, 1fr); gap: 3px; align-items: center; font-size: .66rem; margin-top: 8px; }
+.ad-pgrid .h { text-align: center; color: var(--muted); }
+.ad-pgrid .pn { font-size: .74rem; font-weight: 700; }
+.ad-pgrid i, .cal-legend i.p-jamaa, .cal-legend i.p-ontime, .cal-legend i.p-late, .cal-legend i.p-qada { aspect-ratio: 1; border-radius: 4px; background: var(--track); display: block; }
+.p-jamaa { background: #536B3C !important; } .p-ontime { background: #91AA62 !important; } .p-late { background: #F2CF6B !important; } .p-qada { background: #F3A9B4 !important; } .ad-pgrid i.na { opacity: .3; }
+.ad-habit { padding: 8px 0; border-bottom: 1px dashed var(--line); }
+.ad-dots { display: grid; grid-template-columns: repeat(14, 1fr); gap: 3px; margin-top: 6px; }
+.ad-dots i { aspect-ratio: 1; border-radius: 50%; background: var(--track); opacity: .5; }
+.ad-dots i.d { background: var(--green); opacity: 1; } .ad-dots i.m { background: var(--pink); opacity: 1; }
+.ad-goal { padding: 8px 0; border-bottom: 1px dashed var(--line); }
+.wrap { flex-wrap: wrap; }

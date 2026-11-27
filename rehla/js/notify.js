@@ -28,7 +28,7 @@ export async function requestPermission() {
   return Notification.requestPermission();
 }
 
-async function systemNotify(title, body, tag) {
+export async function systemNotify(title, body, tag) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return false;
   try {
     const reg = await navigator.serviceWorker?.getRegistration();

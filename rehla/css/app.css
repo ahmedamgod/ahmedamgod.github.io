@@ -557,6 +557,17 @@ mark { background: var(--yellow); color: inherit; border-radius: 4px; padding: 0
 .badge-dot.upd { background: #F6C94F; font-size: 11px; }
 .update-row { padding: 4px 0 10px; border-bottom: 1px dashed var(--line); margin-bottom: 10px; }
 
+/* ---------- consent & admin link ---------- */
+.consent { background: #FFF8E2; border: 1.5px solid #F2CF6B; border-radius: 16px; padding: 12px 14px; margin: 12px 0; font-size: .88rem; line-height: 1.8; text-align: right; }
+.consent p { margin: 4px 0; }
+.consent-title { font-weight: 800; color: #7A5A12; }
+.consent-check { display: flex; align-items: flex-start; gap: 8px; margin-top: 8px; font-weight: 700; cursor: pointer; }
+.consent-check input { width: 22px; height: 22px; min-height: 0; flex-shrink: 0; margin-top: 3px; accent-color: var(--green); }
+[data-theme="dark"] .consent { background: #3A3520; border-color: #8C7633; }
+[data-theme="dark"] .consent-title { color: var(--yellow-d); }
+.admin-link { display: flex; align-items: center; gap: 12px; background: linear-gradient(120deg, var(--green-l), var(--card)); color: var(--green-d); }
+.admin-link b { display: block; } .admin-link small { color: var(--ink2); }
+
 /* ---------- install ---------- */
 .install-card { display: flex; align-items: center; gap: 12px; background: linear-gradient(120deg, #E9F3DA, #FFFBEE); border: 1.5px solid #CFE2B2; animation: pop-in .4s; }
 .install-card img { border-radius: 14px; box-shadow: var(--shadow); flex-shrink: 0; }
