@@ -560,9 +560,9 @@ mark { background: var(--yellow); color: inherit; border-radius: 4px; padding: 0
 
 /* ---------- cropper ---------- */
 .cropper { position: relative; width: 100%; aspect-ratio: var(--ar, 1); max-height: 60vh; margin: 8px auto 4px; border-radius: 16px; overflow: hidden; background: #111; touch-action: none; user-select: none; }
-.crop-view { position: absolute; inset: 0; cursor: grab; }
+.crop-view { position: absolute; inset: 0; cursor: grab; touch-action: none; }
 .crop-view:active { cursor: grabbing; }
-.crop-view img { position: absolute; top: 0; left: 0; max-width: none; will-change: transform; }
+.crop-view img { position: absolute; top: 0; left: 0; max-width: none; will-change: transform; touch-action: none; pointer-events: none; }
 .crop-mask { position: absolute; inset: 0; margin: auto; border-radius: 50%; box-shadow: 0 0 0 9999px rgba(0, 0, 0, .5); border: 2px solid rgba(255, 255, 255, .9); pointer-events: none; }
 .crop-frame { position: absolute; inset: 0; border: 2px solid rgba(255, 255, 255, .9); border-radius: 12px; pointer-events: none; box-shadow: 0 0 0 9999px rgba(0, 0, 0, .35); }
 .crop-zoom { display: flex; align-items: center; gap: 10px; margin: 8px 2px 0; color: var(--muted); }
