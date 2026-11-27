@@ -8,16 +8,12 @@ let mode = 'welcome';
 export const resetAuthMode = () => { mode = 'welcome'; };
 const lastEmail = () => { try { return localStorage.getItem('rehla.lastEmail') || ''; } catch { return ''; } };
 
-export const CONSENT_TEXT = `رحلة فيها مشرفين بيتابعوا المشتركين عشان يساعدوهم ويدعموهم.
-لما تعمل حساب، المشرف المسؤول عنك ومدير البرنامج هيقدروا يشوفوا كل بياناتك في التطبيق: صلواتك وقرايتك وأذكارك، وعاداتك، وصحتك، ومشاعرك، و<b>يومياتك كاملة</b>، وأهدافك وإنجازاتك.
-ممكن كمان يبعتولك رسايل جوه التطبيق.`;
+export const CONSENT_TEXT = 'المشرف المسؤول عنك ومدير البرنامج بيقدروا يشوفوا بياناتك في التطبيق (عباداتك وعاداتك وصحتك ومشاعرك ويومياتك وأهدافك)، وممكن يبعتولك رسايل تشجيع ودعم.';
 
 export function consentBox() {
-  return `<div class="consent">
-    <p class="consent-title">👀 قبل ما تكمّل — مهم تعرف</p>
-    <p>${CONSENT_TEXT.replace(/\n/g, '<br>')}</p>
-    <label class="consent-check"><input type="checkbox" name="consent" required> <span>فهمت، وموافق إن المشرف يتابع بياناتي ويومياتي</span></label>
-  </div>`;
+  return `<label class="consent-mini"><input type="checkbox" name="consent" required>
+      <span>موافق إن المشرف يتابع رحلتي ويشوف بياناتي ويومياتي عشان يدعمني 🤍</span></label>
+    <details class="consent-more"><summary>يعني إيه؟</summary><p>${CONSENT_TEXT}</p></details>`;
 }
 
 export default {
