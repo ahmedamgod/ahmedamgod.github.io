@@ -69,8 +69,7 @@ export default {
     const u = cloud.currentUser();
     if (u) {
       const show = () => { const box = el.querySelector('#staff-link'); if (box) box.innerHTML = `<a class="card admin-link" href="admin/">${icon('chart', 22)}<div class="grow"><b>لوحة الإدارة</b><small>متابعة المشتركين والإحصائيات</small></div><span class="go">${icon('back', 16)}</span></a>`; };
-      if (cloud.isOwnerEmail(u.email)) show();
-      else cloud.fs.getDoc(cloud.fs.doc(cloud.db, 'staff', u.uid)).then((d) => { if (d.exists()) show(); }).catch(() => {});
+      cloud.fs.getDoc(cloud.fs.doc(cloud.db, 'staff', u.uid)).then((d) => { if (d.exists()) show(); }).catch(() => {});
     }
     el.addEventListener('click', async (e) => {
       const a = e.target.closest('[data-act]')?.dataset.act;

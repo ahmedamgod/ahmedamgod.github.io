@@ -8,5 +8,5 @@ export const firebaseConfig = {
   appId: '1:138151826044:web:a8695735925efaa200aff9',
 };
 
-// إيميلات المدير — لازم تبقى نفس اللي في firestore.rules
-export const OWNER_EMAILS = ['OWNER_EMAIL_HERE'];
+// إيميل المدير مش مكتوب هنا عشان الكود ده مكشوف على GitHub.
+// هو موجود بس في قواعد الحماية جوه Firebase Console (Firestore ← Rules).

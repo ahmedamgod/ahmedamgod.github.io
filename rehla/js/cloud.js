@@ -10,7 +10,7 @@ import {
   doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs, onSnapshot, query, where, orderBy, limit,
   writeBatch, addDoc, serverTimestamp,
 } from '../vendor/firebase-firestore.js';
-import { firebaseConfig, OWNER_EMAILS } from './firebase-config.js';
+import { firebaseConfig } from './firebase-config.js';
 
 export const fs = { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs, onSnapshot, query, where, orderBy, limit, writeBatch, addDoc, serverTimestamp };
 
@@ -27,7 +27,6 @@ if (useEmu) {
   connectFirestoreEmulator(db, '127.0.0.1', 8080);
 }
 
-export const isOwnerEmail = (email) => !!email && OWNER_EMAILS.map((e) => e.toLowerCase()).includes(email.toLowerCase());
 
 // أول حالة دخول (بعد ما Firebase يقرا الجلسة المحفوظة)
 export function firstUser() {

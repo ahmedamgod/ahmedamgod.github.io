@@ -486,28 +486,29 @@ function loginView(msg = '') {
   };
 }
 
-function verifyView(user) {
-  main.innerHTML = `<section class="onboard"><h1>أكّد إيميلك الأول 📧</h1>
-    <p class="muted">عشان الأمان، صلاحيات المدير بتشتغل بعد تأكيد الإيميل <b dir="ltr">${esc(user.email)}</b>. افتح الرسالة اللي بعتناها ودوس على الرابط (بص في الـ Spam كمان)، وبعدين ارجع هنا.</p>
-    <button class="btn primary" id="done">أكّدت ✓</button><button class="btn soft" id="again">ابعت الرسالة تاني</button><button class="link muted" data-act="logout">خروج</button></section>`;
-  main.querySelector('#again').onclick = async () => { try { await cloud.resendVerification(); toast('بعتناها تاني 📧'); } catch (e) { toast(cloud.arError(e), 'err'); } };
-  main.querySelector('#done').onclick = async () => { await user.reload(); await user.getIdToken(true); start(); };
-}
-
 async function start() {
   const user = cloud.currentUser() || (await cloud.firstUser());
   if (!user) return loginView();
-  const ownerByEmail = cloud.isOwnerEmail(user.email);
-  if (ownerByEmail && !user.emailVerified) return verifyView(user);
-  let role = ownerByEmail ? 'owner' : null;
+  // الصلاحية بتتحدد من قواعد الحماية على السيرفر: يا إما عنده ملف في staff،
+  // يا إما إيميله هو إيميل المدير (المتأكد) فالسيرفر بيسمحله يعمل ملفه.
+  let role = null;
   try {
     const sd = await fs.getDoc(fs.doc(db, 'staff', user.uid));
-    if (sd.exists()) role = role || sd.data().role;
-    if (ownerByEmail && !sd.exists()) await fs.setDoc(fs.doc(db, 'staff', user.uid), { role: 'owner', email: user.email, name: user.displayName || '', at: Date.now(), by: user.uid });
+    if (sd.exists()) role = sd.data().role;
   } catch (e) { console.warn(e); }
   if (!role) {
+    try {
+      await fs.setDoc(fs.doc(db, 'staff', user.uid), { role: 'owner', email: user.email, name: user.displayName || '', at: Date.now(), by: user.uid });
+      role = 'owner';
+    } catch { /* مش المدير */ }
+  }
+  if (!role) {
     main.innerHTML = `<section class="onboard"><h1>مش مسموحلك تدخل هنا</h1><p class="muted">الحساب <b dir="ltr">${esc(user.email)}</b> مش مدير ولا مشرف. لو المفروض يكون مشرف، اطلب من المدير يضيفك.</p>
-      <a class="btn primary" href="../">ارجع للتطبيق</a><button class="link muted" data-act="logout">خروج بحساب تاني</button></section>`;
+      ${user.emailVerified ? '' : `<div class="card"><p class="small">لو إنت المدير: لازم تأكّد إيميلك الأول. افتح الرسالة اللي وصلتلك من Firebase ودوس على الرابط (بص في الـ Spam كمان)، وبعدين دوس "أكّدت".</p>
+        <div class="row gap-s center"><button class="btn primary" id="done">أكّدت ✓</button><button class="btn soft" id="again">ابعت الرسالة تاني</button></div></div>`}
+      <a class="btn ghost" href="../">ارجع للتطبيق</a><button class="link muted" data-act="logout">خروج بحساب تاني</button></section>`;
+    main.querySelector('#again')?.addEventListener('click', async () => { try { await cloud.resendVerification(); toast('بعتناها تاني 📧'); } catch (e) { toast(cloud.arError(e), 'err'); } });
+    main.querySelector('#done')?.addEventListener('click', async () => { await user.reload(); await user.getIdToken(true); start(); });
     return;
   }
   me = { uid: user.uid, email: user.email, name: user.displayName || '', role };
