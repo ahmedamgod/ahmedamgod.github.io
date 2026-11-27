@@ -44,6 +44,7 @@ export default {
     <div id="staff-link"></div>
     <section class="card menu">
       <a href="#/profile/settings">${icon('gear', 20)} الإعدادات<span class="go">${icon('back', 16)}</span></a>
+      <button data-terms>${icon('archive', 20)} الشروط والأحكام</button>
       <button data-act="export">${icon('download', 20)} تصدير بياناتي (نسخة احتياطية)</button>
       <label>${icon('upload', 20)} استرجاع نسخة احتياطية<input type="file" accept="application/json,.json" id="imp" hidden></label>
       ${!ses?.guest ? `<button data-act="pw">${icon('lock', 20)} غيّر الباسورد</button>` : ''}
