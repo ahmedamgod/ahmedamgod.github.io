@@ -7,6 +7,7 @@ import * as S from '../stats.js';
 import { requestPermission, tick } from '../notify.js';
 import { pinHash, lockJournal } from './journal.js';
 import * as db from '../db.js';
+import { installHelp } from '../install.js';
 
 export default {
   render(params) {
@@ -183,6 +184,7 @@ function settings() {
   const s = getState().settings;
   const perm = 'Notification' in window ? Notification.permission : 'unsupported';
   return pageHead('الإعدادات') + `
+  <section class="card"><h2>📱 التطبيق</h2>${installHelp()}</section>
   <section class="card"><h2>الشكل</h2>
     <div class="field"><span>الوضع</span>${segmented([['light', '☀️ فاتح'], ['dark', '🌙 غامق'], ['auto', '⚙️ زي الجهاز']], s.theme, 'theme')}</div>
     <div class="field"><span>اللغة</span><p class="small">العربية (العامية المصرية) 🇪🇬</p></div>

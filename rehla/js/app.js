@@ -4,6 +4,7 @@ import { setDigits } from './util.js';
 import { solid, scene } from './art.js';
 import { toast, closeTopSheet } from './ui.js';
 import { startScheduler } from './notify.js';
+import { promptInstall, hideBanner, isStandalone } from './install.js';
 
 import home from './screens/home.js';
 import worship from './screens/worship.js';
@@ -94,7 +95,21 @@ document.addEventListener('click', (e) => {
   else go(to);
 });
 
-window.addEventListener('hashchange', () => { while (closeTopSheet()); if (store.getState()?.onboarded) render(); });
+window.addEventListener('hashchange', () => { while (closeTopSheet({ noHistory: true })); if (store.getState()?.onboarded) render(); });
+// التثبيت كتطبيق
+document.addEventListener('click', async (e) => {
+  if (e.target.closest('[data-install]')) {
+    const r = await promptInstall();
+    if (r === 'accepted') toast('رحلة بتتثبت على موبايلك 🌿');
+    else if (r === 'unavailable') toast('من قايمة المتصفح اختار "تثبيت التطبيق"', 'info');
+    if (store.getState()?.onboarded) render({ keepScroll: true });
+  }
+  if (e.target.closest('[data-install-hide]')) { hideBanner(); document.getElementById('install-card')?.remove(); }
+});
+const rerenderIfReady = () => { if (store.getState()?.onboarded) render({ keepScroll: true }); };
+window.addEventListener('rehla:installable', rerenderIfReady);
+window.addEventListener('rehla:installed', () => { toast('اتثبتت! هتلاقي رحلة على الشاشة الرئيسية 🎉'); rerenderIfReady(); });
+document.documentElement.classList.toggle('standalone', isStandalone());
 window.addEventListener('rehla:save-error', () => toast('مقدرناش نحفظ — ممكن مساحة الجهاز مليانة', 'err'));
 window.addEventListener('online', () => toast('رجع النت 🌿'));
 window.addEventListener('offline', () => toast('إنت أوفلاين — كل حاجة بتتحفظ على جهازك عادي', 'info'));
