@@ -10,8 +10,8 @@ const lastEmail = () => { try { return localStorage.getItem('rehla.lastEmail') |
 
 export function consentBox() {
   return `<label class="consent-mini"><input type="checkbox" name="consent" required>
-      <span>موافق على <button type="button" class="link-inline" data-terms>الشروط والأحكام</button>، ومنها إن المشرف يتابع رحلتي ويومياتي عشان يدعمني 🤍</span></label>
-    <button type="button" class="consent-more" data-terms>المزيد ←</button>`;
+      <span>موافق على <button type="button" class="link-inline" data-terms>الشروط والأحكام</button> 🤍</span></label>
+    <button type="button" class="consent-more" data-terms>اقرا الشروط والأحكام ←</button>`;
 }
 
 export default {
