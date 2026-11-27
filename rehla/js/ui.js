@@ -14,7 +14,27 @@ export function toast(msg, type = 'ok') {
 }
 
 // ---------- Bottom sheet / modal ----------
+// زرار الرجوع في الموبايل بيقفل أي نافذة مفتوحة الأول (زي التطبيقات)
 let sheetStack = [];
+let skipPop = 0;
+export function backable(doClose) {
+  let closed = false;
+  const close = (opts = {}) => {
+    if (closed) return;
+    closed = true;
+    sheetStack = sheetStack.filter((s) => s !== close);
+    doClose();
+    if (!opts.fromPop && !opts.noHistory && history.state?.rehlaLayer) { skipPop++; history.back(); }
+  };
+  try { history.pushState({ rehlaLayer: true }, ''); } catch {}
+  sheetStack.push(close);
+  return close;
+}
+window.addEventListener('popstate', () => {
+  if (skipPop) { skipPop--; return; }
+  const c = sheetStack[sheetStack.length - 1];
+  if (c) c({ fromPop: true });
+});
 export function sheet({ title, body, onMount, wide = false }) {
   const wrap = document.createElement('div');
   wrap.className = 'sheet-wrap';
@@ -26,19 +46,17 @@ export function sheet({ title, body, onMount, wide = false }) {
     </section>`;
   document.body.appendChild(wrap);
   requestAnimationFrame(() => wrap.classList.add('open'));
-  const close = () => {
+  const close = backable(() => {
     wrap.classList.remove('open');
-    sheetStack = sheetStack.filter((s) => s !== close);
     setTimeout(() => wrap.remove(), 250);
-  };
+  });
   wrap.addEventListener('click', (e) => { if (e.target.closest('[data-close]')) close(); });
-  sheetStack.push(close);
   const first = wrap.querySelector('input,textarea,select');
   if (first && !('ontouchstart' in window)) setTimeout(() => first.focus(), 260);
   onMount?.(wrap.querySelector('.sheet-body'), close);
   return close;
 }
-export const closeTopSheet = () => { const c = sheetStack[sheetStack.length - 1]; if (c) { c(); return true; } return false; };
+export const closeTopSheet = (opts) => { const c = sheetStack[sheetStack.length - 1]; if (c) { c(opts); return true; } return false; };
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeTopSheet(); });
 
 export function confirmBox(message, { ok = 'أيوه', cancel = 'لأ', danger = false } = {}) {

@@ -1,11 +1,12 @@
 import { getState, update, day, peekDay } from '../store.js';
 import { today, fmtDate, greeting, num, esc, hashStr, fmtTime } from '../util.js';
 import { logo, art, icon, solid } from '../art.js';
-import { celebrate, sheet, toast, progressBar } from '../ui.js';
+import { celebrate, sheet, toast, progressBar, backable } from '../ui.js';
 import * as S from '../stats.js';
 import { DAILY_DHIKR } from '../data/azkar.js';
 import { MESSAGES, MOODS, PRAYERS } from '../data/content.js';
 import { nextPrayer } from '../notify.js';
+import { installBanner } from '../install.js';
 
 let msgShift = 0;
 
@@ -87,6 +88,8 @@ export default {
       ${progressBar(comp)}
       <div class="ts-row small"><span>🔥 ${num(streak)} يوم ورا بعض</span><span>⭐ ${num(pts)} نقطة · ${lvl.icon} ${lvl.name}</span></div>
     </a>
+
+    ${installBanner()}
 
     <section class="grid3 features">
       ${CARDS.map(([route, title, a, c], i) => {
@@ -216,8 +219,9 @@ function focusMode(dz, tap) {
     <p class="muted">اضغط على الدايرة أو في أي حتة عشان تعدّ</p>`;
   document.body.appendChild(ov);
   paint();
+  const close = backable(() => { ov.remove(); update(() => {}); });
   ov.addEventListener('click', (e) => {
-    if (e.target.closest('.fm-close')) { ov.remove(); update(() => {}); return; }
+    if (e.target.closest('.fm-close')) { close(); return; }
     tap(); paint();
     ov.classList.remove('pulse'); void ov.offsetWidth; ov.classList.add('pulse');
   });
