@@ -111,7 +111,7 @@ window.addEventListener('hashchange', () => { while (closeTopSheet({ noHistory: 
 document.addEventListener('click', (e) => {
   if (!e.target.closest('[data-terms]')) return;
   e.preventDefault();
-  openSheet({ title: 'الشروط والأحكام', body: termsHtml() + '<button class="btn primary block mt" data-close>تمام</button>' });
+  openSheet({ title: 'Terms & Conditions', body: termsHtml() + '<button class="btn primary block mt" data-close>تمام</button>' });
 });
 
 // التثبيت كتطبيق
