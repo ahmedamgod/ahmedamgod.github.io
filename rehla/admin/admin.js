@@ -486,29 +486,36 @@ function loginView(msg = '') {
   };
 }
 
-async function start() {
+async function start(forceRefresh) {
   const user = cloud.currentUser() || (await cloud.firstUser());
   if (!user) return loginView();
-  // الصلاحية بتتحدد من قواعد الحماية على السيرفر: يا إما عنده ملف في staff،
-  // يا إما إيميله هو إيميل المدير (المتأكد) فالسيرفر بيسمحله يعمل ملفه.
+  // نجدّد "تذكرة الدخول" عشان قواعد الحماية تشوف إن الإيميل اتأكّد
+  if (forceRefresh) { main.innerHTML = '<div class="empty"><p>بنتأكد…</p></div>'; try { await user.reload(); await user.getIdToken(true); } catch {} }
+  // الصلاحية بتتحدد من قواعد الحماية على السيرفر
   let role = null;
   try {
     const sd = await fs.getDoc(fs.doc(db, 'staff', user.uid));
     if (sd.exists()) role = sd.data().role;
   } catch (e) { console.warn(e); }
   if (!role) {
+    try { await user.getIdToken(true); } catch {}
     try {
       await fs.setDoc(fs.doc(db, 'staff', user.uid), { role: 'owner', email: user.email, name: user.displayName || '', at: Date.now(), by: user.uid });
       role = 'owner';
-    } catch { /* مش المدير */ }
+    } catch (e) { console.warn('owner setDoc', e?.code || e); }
   }
   if (!role) {
-    main.innerHTML = `<section class="onboard"><h1>مش مسموحلك تدخل هنا</h1><p class="muted">الحساب <b dir="ltr">${esc(user.email)}</b> مش مدير ولا مشرف. لو المفروض يكون مشرف، اطلب من المدير يضيفك.</p>
-      ${user.emailVerified ? '' : `<div class="card"><p class="small">لو إنت المدير: لازم تأكّد إيميلك الأول. افتح الرسالة اللي وصلتلك من Firebase ودوس على الرابط (بص في الـ Spam كمان)، وبعدين دوس "أكّدت".</p>
-        <div class="row gap-s center"><button class="btn primary" id="done">أكّدت ✓</button><button class="btn soft" id="again">ابعت الرسالة تاني</button></div></div>`}
+    main.innerHTML = `<section class="onboard"><h1>مش مسموحلك تدخل هنا</h1>
+      <p class="muted">الحساب <b dir="ltr">${esc(user.email)}</b> لسه مش ظاهر كمدير ولا مشرف.</p>
+      <div class="card" style="text-align:right"><p class="small">لو إنت المدير:</p>
+        <ul class="points-list"><li>${user.emailVerified ? '✓ إيميلك متأكد' : '١) أكّد إيميلك من الرسالة اللي في الـ Gmail (بص في Spam كمان)'}</li>
+        <li>٢) اتأكد إن قواعد الحماية (firestore.rules) متحطوطة في Firebase ومكتوب فيها إيميلك</li>
+        <li>٣) دوس "جرّب تاني" تحت</li></ul>
+        <div class="row gap-s center mt"><button class="btn primary" id="retry">↻ جرّب تاني</button>
+        ${user.emailVerified ? '' : '<button class="btn soft" id="again">ابعت رسالة التأكيد</button>'}</div></div>
       <a class="btn ghost" href="../">ارجع للتطبيق</a><button class="link muted" data-act="logout">خروج بحساب تاني</button></section>`;
-    main.querySelector('#again')?.addEventListener('click', async () => { try { await cloud.resendVerification(); toast('بعتناها تاني 📧'); } catch (e) { toast(cloud.arError(e), 'err'); } });
-    main.querySelector('#done')?.addEventListener('click', async () => { await user.reload(); await user.getIdToken(true); start(); });
+    main.querySelector('#retry').onclick = () => start(true);
+    main.querySelector('#again')?.addEventListener('click', async () => { try { await cloud.resendVerification(); toast('بعتناها تاني 📧 — دوس الرابط وبعدين "جرّب تاني"'); } catch (e) { toast(cloud.arError(e), 'err'); } });
     return;
   }
   me = { uid: user.uid, email: user.email, name: user.displayName || '', role };
