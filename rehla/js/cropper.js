@@ -32,25 +32,31 @@ function open(img, url, { shape, aspect, out, quality }, resolve) {
       const im = b.querySelector('#cimg');
       const zoomEl = b.querySelector('#zoom');
       const iw = img.naturalWidth, ih = img.naturalHeight;
-      let VW = 0, VH = 0, k0 = 1, zoom = 1, tx = 0, ty = 0;
+      let VW = 0, VH = 0, kFit = 1, kMax = 1, k = 1, tx = 0, ty = 0;
 
-      const apply = () => { const k = k0 * zoom; im.style.width = iw * k + 'px'; im.style.height = ih * k + 'px'; im.style.transform = `translate(${tx}px,${ty}px)`; };
-      const clamp = () => { const k = k0 * zoom, dw = iw * k, dh = ih * k; tx = Math.min(0, Math.max(VW - dw, tx)); ty = Math.min(0, Math.max(VH - dh, ty)); };
-      const setZoom = (z) => {
-        const kOld = k0 * zoom;
-        const cx = (VW / 2 - tx) / kOld, cy = (VH / 2 - ty) / kOld;
-        zoom = Math.min(4, Math.max(1, z));
-        const k = k0 * zoom;
+      const apply = () => { im.style.width = iw * k + 'px'; im.style.height = ih * k + 'px'; im.style.transform = `translate(${tx}px,${ty}px)`; };
+      const clamp = () => {
+        const dw = iw * k, dh = ih * k;
+        tx = dw <= VW ? (VW - dw) / 2 : Math.min(0, Math.max(VW - dw, tx));
+        ty = dh <= VH ? (VH - dh) / 2 : Math.min(0, Math.max(VH - dh, ty));
+      };
+      const setScale = (nk) => {
+        const cx = (VW / 2 - tx) / k, cy = (VH / 2 - ty) / k;
+        k = Math.min(kMax, Math.max(kFit, nk));
         tx = VW / 2 - cx * k; ty = VH / 2 - cy * k;
         clamp(); apply();
-        zoomEl.value = zoom;
+        zoomEl.value = k;
       };
       const init = () => {
         const r = view.getBoundingClientRect();
         VW = r.width; VH = r.height;
         if (!VW || !VH) return requestAnimationFrame(init);
-        k0 = Math.max(VW / iw, VH / ih);
-        zoom = 1; tx = (VW - iw * k0) / 2; ty = (VH - ih * k0) / 2;
+        kFit = Math.min(VW / iw, VH / ih);   // الصورة كلها بتبان
+        const kCover = Math.max(VW / iw, VH / ih); // الصورة بتملا الإطار
+        kMax = kCover * 2.5;
+        k = kCover; // نبدأ بإنها مالياه الإطار، وتقدر تصغّر أو تكبّر
+        zoomEl.min = kFit; zoomEl.max = kMax; zoomEl.step = (kMax - kFit) / 200; zoomEl.value = k;
+        tx = (VW - iw * k) / 2; ty = (VH - ih * k) / 2;
         clamp(); apply();
       };
       requestAnimationFrame(init);
@@ -70,22 +76,22 @@ function open(img, url, { shape, aspect, out, quality }, resolve) {
         else if (pts.size >= 2) {
           const a = [...pts.values()];
           const d = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y);
-          if (lastDist) setZoom(zoom * (d / lastDist));
+          if (lastDist) setScale(k * (d / lastDist));
           lastDist = d;
         }
       });
-      zoomEl.addEventListener('input', () => setZoom(parseFloat(zoomEl.value)));
+      zoomEl.addEventListener('input', () => setScale(parseFloat(zoomEl.value)));
 
       b.querySelector('#ok').onclick = () => {
-        const k = k0 * zoom;
-        const sx = -tx / k, sy = -ty / k, sw = VW / k, sh = VH / k;
         const outW = aspect >= 1 ? out : Math.round(out * aspect);
         const outH = aspect >= 1 ? Math.round(out / aspect) : out;
         const c = document.createElement('canvas');
         c.width = outW; c.height = outH;
         const ctx = c.getContext('2d');
         ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, outW, outH);
-        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outW, outH);
+        // نرسم الصورة بنفس مكانها وحجمها اللي على الشاشة، لكن بمقاس الإخراج
+        const fx = outW / VW, fy = outH / VH;
+        ctx.drawImage(img, tx * fx, ty * fy, iw * k * fx, ih * k * fy);
         done = true;
         URL.revokeObjectURL(url);
         resolve(c.toDataURL('image/jpeg', quality));
