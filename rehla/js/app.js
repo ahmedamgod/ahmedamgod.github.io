@@ -14,6 +14,8 @@ import { systemNotify } from './notify.js';
 import * as db from './db.js';
 import { formError, backable, discardLayers } from './ui.js';
 import { esc } from './util.js';
+import { termsHtml } from './data/terms.js';
+import { sheet as openSheet } from './ui.js';
 
 import home from './screens/home.js';
 import worship from './screens/worship.js';
@@ -105,6 +107,13 @@ document.addEventListener('click', (e) => {
 });
 
 window.addEventListener('hashchange', () => { while (closeTopSheet({ noHistory: true })); if (store.getState()?.onboarded) render(); });
+// الشروط والأحكام
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('[data-terms]')) return;
+  e.preventDefault();
+  openSheet({ title: 'الشروط والأحكام', body: termsHtml() + '<button class="btn primary block mt" data-close>تمام</button>' });
+});
+
 // التثبيت كتطبيق
 document.addEventListener('click', async (e) => {
   if (e.target.closest('[data-install]')) {

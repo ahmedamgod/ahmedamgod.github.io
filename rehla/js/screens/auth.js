@@ -8,12 +8,10 @@ let mode = 'welcome';
 export const resetAuthMode = () => { mode = 'welcome'; };
 const lastEmail = () => { try { return localStorage.getItem('rehla.lastEmail') || ''; } catch { return ''; } };
 
-export const CONSENT_TEXT = 'المشرف المسؤول عنك ومدير البرنامج بيقدروا يشوفوا بياناتك في التطبيق (عباداتك وعاداتك وصحتك ومشاعرك ويومياتك وأهدافك)، وممكن يبعتولك رسايل تشجيع ودعم.';
-
 export function consentBox() {
   return `<label class="consent-mini"><input type="checkbox" name="consent" required>
-      <span>موافق إن المشرف يتابع رحلتي ويشوف بياناتي ويومياتي عشان يدعمني 🤍</span></label>
-    <details class="consent-more"><summary>يعني إيه؟</summary><p>${CONSENT_TEXT}</p></details>`;
+      <span>موافق على <button type="button" class="link-inline" data-terms>الشروط والأحكام</button>، ومنها إن المشرف يتابع رحلتي ويومياتي عشان يدعمني 🤍</span></label>
+    <button type="button" class="consent-more" data-terms>المزيد ←</button>`;
 }
 
 export default {

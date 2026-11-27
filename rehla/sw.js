@@ -1,12 +1,12 @@
 // Service worker: التطبيق يشتغل أوفلاين بالكامل
 // غيّر الرقم ده (ومعاه APP_VERSION في js/update.js) مع كل إصدار جديد
-const VERSION = 'rehla-v1.5.1';
+const VERSION = 'rehla-v1.5.2';
 const CORE = [
   './', './index.html', './manifest.webmanifest', './css/app.css',
   './js/app.js', './js/db.js', './js/store.js', './js/auth.js', './js/util.js', './js/ui.js', './js/art.js',
   './js/stats.js', './js/notify.js', './js/prayertimes.js', './js/assistant.js', './js/install.js', './js/update.js', './js/cloud.js', './js/sync.js', './js/firebase-config.js',
   './vendor/firebase-app.js', './vendor/firebase-auth.js', './vendor/firebase-firestore.js',
-  './js/data/azkar.js', './js/data/quran.js', './js/data/content.js',
+  './js/data/azkar.js', './js/data/quran.js', './js/data/content.js', './js/data/terms.js',
   './js/screens/home.js', './js/screens/worship.js', './js/screens/habits.js', './js/screens/journal.js',
   './js/screens/mood.js', './js/screens/health.js', './js/screens/journey.js', './js/screens/achievements.js',
   './js/screens/reports.js', './js/screens/support.js', './js/screens/profile.js', './js/screens/notifications.js',

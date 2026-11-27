@@ -1,5 +1,5 @@
 // التحديثات: لما ينزل إصدار جديد بيظهر شريط "فيه تحديث جديد"، وتقدر كمان تدوّر يدوي من الإعدادات
-export const APP_VERSION = '1.5.1';
+export const APP_VERSION = '1.5.2';
 
 let reg = null;
 let waiting = null;
