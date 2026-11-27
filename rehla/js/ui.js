@@ -23,13 +23,15 @@ export function backable(doClose) {
     if (closed) return;
     closed = true;
     sheetStack = sheetStack.filter((s) => s !== close);
-    doClose();
+    if (!opts.discard) doClose();
     if (!opts.fromPop && !opts.noHistory && history.state?.rehlaLayer) { skipPop++; history.back(); }
   };
   try { history.pushState({ rehlaLayer: true }, ''); } catch {}
   sheetStack.push(close);
   return close;
 }
+// نشيل كل الطبقات من غير ما ننفّذها (لما ننتقل لشاشة جديدة خالص)
+export function discardLayers() { [...sheetStack].reverse().forEach((c) => c({ discard: true, noHistory: true })); }
 window.addEventListener('popstate', () => {
   if (skipPop) { skipPop--; return; }
   const c = sheetStack[sheetStack.length - 1];

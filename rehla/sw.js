@@ -1,6 +1,6 @@
 // Service worker: التطبيق يشتغل أوفلاين بالكامل
 // غيّر الرقم ده (ومعاه APP_VERSION في js/update.js) مع كل إصدار جديد
-const VERSION = 'rehla-v1.4.0';
+const VERSION = 'rehla-v1.4.1';
 const CORE = [
   './', './index.html', './manifest.webmanifest', './css/app.css',
   './js/app.js', './js/db.js', './js/store.js', './js/auth.js', './js/util.js', './js/ui.js', './js/art.js',
