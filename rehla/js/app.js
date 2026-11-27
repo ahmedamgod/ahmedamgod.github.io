@@ -6,6 +6,13 @@ import { toast, closeTopSheet } from './ui.js';
 import { startScheduler } from './notify.js';
 import { promptInstall, hideBanner, isStandalone } from './install.js';
 import { initUpdates, applyUpdate } from './update.js';
+import * as cloud from './cloud.js';
+import { startSync, stopSync, flushSync } from './sync.js';
+import { consentBox } from './screens/auth.js';
+import { systemNotify } from './notify.js';
+import * as db from './db.js';
+import { formError } from './ui.js';
+import { esc } from './util.js';
 
 import home from './screens/home.js';
 import worship from './screens/worship.js';
@@ -117,9 +124,69 @@ window.addEventListener('online', () => toast('رجع النت 🌿'));
 window.addEventListener('offline', () => toast('إنت أوفلاين — كل حاجة بتتحفظ على جهازك عادي', 'info'));
 
 let unsub = null;
+const withTimeout = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(() => r('timeout'), ms))]);
+
+function screenOnly(html) {
+  nav.hidden = true;
+  document.body.classList.remove('has-nav');
+  const el = document.createElement('div');
+  el.className = 'screen enter';
+  el.innerHTML = html;
+  main.replaceChildren(el);
+  return el;
+}
+
+// لازم المستخدم يوافق على المتابعة قبل ما يكمّل
+function consentGate(user) {
+  return new Promise((resolve) => {
+    const el = screenOnly(`<section class="onboard"><h1>أهلاً بيك في رحلة 🌿</h1>
+      <form id="cf" class="card col gap" novalidate>${consentBox()}<button class="btn primary block lg">موافق، يلا نبدأ</button>
+      <button type="button" class="link center muted" id="out">خروج</button></form></section>`);
+    const f = el.querySelector('#cf');
+    el.querySelector('#out').onclick = async () => { await cloud.logout(); location.reload(); };
+    f.onsubmit = async (e) => {
+      e.preventDefault();
+      if (!f.consent.checked) return formError(f, 'لازم توافق عشان تكمّل');
+      try { await cloud.giveConsent(user.uid, user.displayName || '', user.email); resolve(); }
+      catch (err) { formError(f, cloud.arError(err)); }
+    };
+  });
+}
+
+function showDisabled() {
+  stopSync();
+  const el = screenOnly(`<section class="onboard"><h1>حسابك متوقف مؤقتاً ⏸️</h1>
+    <p class="muted">المشرف وقّف حسابك. كلّمه عشان تعرف السبب وترجع تكمّل رحلتك.</p>
+    <button class="btn ghost" id="out">خروج</button></section>`);
+  el.querySelector('#out').onclick = async () => { await cloud.logout(); location.reload(); };
+}
+window.addEventListener('rehla:disabled', showDisabled);
+window.addEventListener('rehla:message', (e) => {
+  const m = e.detail || {};
+  toast(`📩 ${m.title || 'رسالة جديدة'}`, 'info');
+  systemNotify(m.title || 'رسالة من المشرف', m.body || '', 'msg-' + (m.id || ''));
+});
+
 export async function startSession(session) {
   const acc = auth.accounts().find((a) => a.id === session.id);
-  await store.load(session.id, acc?.name || '');
+  if (session.cloud) {
+    const user = cloud.currentUser();
+    // بيانات المستخدم على السيرفر + الموافقة
+    const doc = await withTimeout(cloud.getUserDoc(user.uid).catch(() => 'offline'), 8000);
+    if (doc && doc !== 'offline' && doc !== 'timeout' && doc.disabled) return showDisabled();
+    if (doc === null || (doc && typeof doc === 'object' && !doc.consentAt)) await consentGate(user);
+    await store.load(user.uid, user.displayName || doc?.name || '');
+    // لو كان عنده حساب قديم على الجهاز بنفس الإيميل، ننقل بياناته
+    if (!store.getState().onboarded) {
+      const old = auth.accounts().find((a) => a.email === (user.email || '').toLowerCase());
+      const oldState = old && (await db.get('state:' + old.id));
+      if (oldState?.onboarded) await store.replaceState(oldState);
+    }
+    await withTimeout(startSync(user.uid), 10000);
+  } else {
+    stopSync();
+    await store.load(session.id, acc?.name || '');
+  }
   applyTheme();
   unsub?.();
   unsub = store.subscribe(() => { applyTheme(); if (store.getState().onboarded) render({ keepScroll: true }); });
@@ -134,6 +201,16 @@ export async function startSession(session) {
   }
   render();
   startScheduler();
+}
+
+export async function signOutAll() {
+  try { await flushSync(); } catch {}
+  stopSync();
+  await store.flush();
+  try { await cloud.logout(); } catch {}
+  auth.logout();
+  location.hash = '';
+  location.reload();
 }
 
 export function showAuth() {
@@ -151,13 +228,17 @@ async function boot() {
   document.getElementById('scene').innerHTML = scene();
   document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   const s = auth.currentSession();
-  if (s && (s.guest || auth.accounts().some((a) => a.id === s.id))) await startSession(s);
-  else showAuth();
+  if (s?.guest) await startSession(s);
+  else {
+    const user = await withTimeout(cloud.firstUser(), 8000);
+    if (user && user !== 'timeout') await startSession({ id: user.uid, guest: false, email: user.email, cloud: true });
+    else showAuth();
+  }
   document.getElementById('splash')?.classList.add('hide');
   setTimeout(() => document.getElementById('splash')?.remove(), 600);
 }
 
-window.addEventListener('pagehide', () => store.flush());
+window.addEventListener('pagehide', () => { store.flush(); flushSync(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden) store.flush(); else if (store.getState()?.onboarded) render({ keepScroll: true }); });
 
 initUpdates();

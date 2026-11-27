@@ -3,6 +3,7 @@ import { today, num, esc, uid, fmtDate, relDay, parseKey, dkey, compressImage } 
 import { pageHead, sheet, toast, confirmBox, empty, segmented } from '../ui.js';
 import { icon } from '../art.js';
 import { MONTHS, DAY_SHORT } from '../data/content.js';
+import { currentUser } from '../cloud.js';
 
 let view = 'list';
 let query = '';
@@ -25,7 +26,7 @@ export default {
     if (params[0] === 'new') return editor(null);
     if (params[0] && params[1] === 'edit') return editor(s.journal.find((j) => j.id === params[0]));
     if (params[0]) return entryView(params[0]);
-    const head = pageHead('يومياتي', { sub: 'مساحتك الخاصة 🔒', actions: `<a class="icon-btn soft" href="#/journal/new" aria-label="تدوينة جديدة">${icon('plus')}</a>` });
+    const head = pageHead('يومياتي', { sub: 'اكتب اللي في قلبك ✍️', actions: `<a class="icon-btn soft" href="#/journal/new" aria-label="تدوينة جديدة">${icon('plus')}</a>` });
     const seg = segmented([['list', 'كل اليوميات'], ['cal', 'بالتقويم']], view, 'v');
     let list = [...s.journal].sort((a, b) => (b.date + b.createdAt > a.date + a.createdAt ? 1 : -1));
     let body = '';
@@ -133,6 +134,7 @@ function editor(j) {
     <div id="imgbox">${v.image ? `<div class="img-prev"><img src="${v.image}" alt=""><button type="button" class="icon-btn sm" id="rmimg" aria-label="شيل الصورة">${icon('x', 16)}</button></div>` : ''}</div>
     <label class="btn soft">${icon('image', 18)} ${v.image ? 'غيّر الصورة' : 'ضيف صورة'}<input type="file" accept="image/*" id="img" hidden></label>
     <button class="btn primary block">${icon('check', 18)} احفظ</button>
+    ${currentUser() ? '<p class="muted small center">👀 المشرف المسؤول عنك بيقدر يشوف يومياتك</p>' : ''}
   </form>`;
 }
 

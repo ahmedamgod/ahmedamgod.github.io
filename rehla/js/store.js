@@ -41,6 +41,9 @@ let state = null;
 let userId = null;
 let saveTimer = null;
 const listeners = new Set();
+const changeListeners = new Set();
+// بيتنادى مع كل تعديل حتى الصامت (للمزامنة)
+export function onChange(fn) { changeListeners.add(fn); return () => changeListeners.delete(fn); }
 const bc = 'BroadcastChannel' in self ? new BroadcastChannel('rehla-sync') : null;
 
 export const getState = () => state;
@@ -81,6 +84,8 @@ export async function flush() {
 // كل التعديلات بتعدي من هنا: نعدّل، نحفظ، ونعيد الرسم
 export function update(fn, { silent = false } = {}) {
   fn(state);
+  state.updatedAt = Date.now();
+  changeListeners.forEach((f) => f());
   clearTimeout(saveTimer);
   saveTimer = setTimeout(flush, 250);
   if (!silent) emit();
@@ -126,3 +131,6 @@ export function importJSON(text) {
 }
 
 export async function replaceState(s) { state = migrate(s); await flush(); emit(); }
+
+// للوحة الأدمن: نعرض بيانات مستخدم تاني في الذاكرة بس، من غير أي حفظ
+export function viewState(s) { userId = null; state = migrate(s); return state; }

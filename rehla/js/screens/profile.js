@@ -9,20 +9,23 @@ import { pinHash, lockJournal } from './journal.js';
 import * as db from '../db.js';
 import { installHelp } from '../install.js';
 import { APP_VERSION, hasUpdate, checkNow } from '../update.js';
+import * as cloud from '../cloud.js';
+import { flushSync, stopSync } from '../sync.js';
+import { consentBox } from './auth.js';
 
 export default {
   render(params) {
     if (params[0] === 'settings') return settings();
     const s = getState();
     const ses = auth.currentSession();
-    const acc = auth.accounts().find((a) => a.id === ses?.id);
+    const email = cloud.currentUser()?.email || '';
     const pts = S.totalPoints();
     const lvl = S.level(pts);
     return pageHead('حسابي', { back: false, actions: `<a class="icon-btn soft" href="#/profile/settings" aria-label="الإعدادات">${icon('gear')}</a>` }) + `
     <section class="card profile-card">
       <label class="avatar" aria-label="غيّر الصورة">${s.profile.avatar ? `<img src="${s.profile.avatar}" alt="صورتك">` : `<span>${esc((s.profile.name || '؟').slice(0, 1))}</span>`}
         <input type="file" accept="image/*" id="av" hidden><i>${icon('image', 14)}</i></label>
-      <div class="grow"><h2>${esc(s.profile.name || 'ضيف')}</h2><small class="muted">${ses?.guest ? 'وضع الضيف' : esc(acc?.email || '')}</small>
+      <div class="grow"><h2>${esc(s.profile.name || 'ضيف')}</h2><small class="muted">${ses?.guest ? 'وضع الضيف' : esc(email)}</small>
         <p class="small">${lvl.icon} ${lvl.name} · ${num(pts)} نقطة</p></div>
       <button class="icon-btn soft" data-act="edit" aria-label="عدّل البروفايل">${icon('edit')}</button>
     </section>
@@ -35,9 +38,10 @@ export default {
       <div class="card stat center"><b>${num(S.badges().filter((b) => b.got).length)}</b><small>شارة</small></div></section>
     <p class="muted small center">معانا من ${fmtDate(s.createdAt, false)} 🌱</p>
 
-    ${ses?.guest ? `<section class="card c-yellow"><h2>إنت داخل كضيف</h2><p class="small">اعمل حساب عشان تحمي بياناتك بباسورد. كل اللي سجلته هيتنقل معاك.</p>
+    ${ses?.guest ? `<section class="card c-yellow"><h2>إنت داخل كضيف</h2><p class="small">اعمل حساب عشان بياناتك تتحفظ على السيرفر ويتابعك مشرف. كل اللي سجلته هيتنقل معاك.</p>
       <button class="btn primary block" data-act="upgrade">اعمل حساب</button></section>` : ''}
 
+    <div id="staff-link"></div>
     <section class="card menu">
       <a href="#/profile/settings">${icon('gear', 20)} الإعدادات<span class="go">${icon('back', 16)}</span></a>
       <button data-act="export">${icon('download', 20)} تصدير بياناتي (نسخة احتياطية)</button>
@@ -61,6 +65,13 @@ export default {
       if (!(await confirmBox('الاسترجاع هيستبدل كل بياناتك الحالية بالنسخة دي. تكمل؟', { ok: 'استرجع' }))) return;
       try { await importJSON(await f.text()); toast('رجعنا بياناتك ✓'); } catch (err) { toast(err.message?.includes('رحلة') ? err.message : 'الملف ده مش سليم', 'err'); }
     });
+    // رابط لوحة الإدارة للمدير والمشرفين
+    const u = cloud.currentUser();
+    if (u) {
+      const show = () => { const box = el.querySelector('#staff-link'); if (box) box.innerHTML = `<a class="card admin-link" href="admin/">${icon('chart', 22)}<div class="grow"><b>لوحة الإدارة</b><small>متابعة المشتركين والإحصائيات</small></div><span class="go">${icon('back', 16)}</span></a>`; };
+      if (cloud.isOwnerEmail(u.email)) show();
+      else cloud.fs.getDoc(cloud.fs.doc(cloud.db, 'staff', u.uid)).then((d) => { if (d.exists()) show(); }).catch(() => {});
+    }
     el.addEventListener('click', async (e) => {
       const a = e.target.closest('[data-act]')?.dataset.act;
       if (a === 'edit') editProfile();
@@ -70,7 +81,10 @@ export default {
       if (a === 'logout') {
         const ses = auth.currentSession();
         if (ses?.guest && !(await confirmBox('بيانات الضيف هتفضل محفوظة على الجهاز ده، وتقدر ترجعلها لما تدخل كضيف تاني.', { ok: 'اخرج' }))) return;
-        await flush(); auth.logout(); location.hash = ''; location.reload();
+        try { await flushSync(); } catch {}
+        stopSync(); await flush();
+        try { await cloud.logout(); } catch {}
+        auth.logout(); location.hash = ''; location.reload();
       }
       if (a === 'delete') deleteSheet();
     });
@@ -118,13 +132,15 @@ function upgradeSheet() {
         e.preventDefault();
         const f = b.querySelector('#f');
         try {
+          if (!auth.validEmail(f.e.value.trim())) return formError(f, 'الإيميل مش مظبوط');
           const data = getState();
-          const acc = await auth.register({ name: f.n.value, email: f.e.value, password: f.p.value });
-          await db.set('state:' + acc.id, data);
+          const user = await cloud.register({ name: f.n.value, email: f.e.value, password: f.p.value, consent: f.consent.checked });
+          await db.set('state:' + user.uid, { ...data, updatedAt: Date.now() });
           await removeUserData('guest');
+          auth.logout();
           close(); toast('اتعمل حسابك وكل بياناتك اتنقلت ✓');
           setTimeout(() => location.reload(), 600);
-        } catch (err) { formError(f, err.message === 'crypto' ? 'المتصفح ده مش بيدعم التشفير' : err.message); }
+        } catch (err) { formError(f, cloud.arError(err)); }
       };
     },
   });
@@ -133,6 +149,7 @@ const authForm = (name = '') => `<form id="f" novalidate>
   <label class="field"><span>الاسم</span><input name="n" id="n" value="${esc(name)}" maxlength="30" autocomplete="name" required></label>
   <label class="field"><span>الإيميل</span><input name="e" id="e" type="email" autocomplete="email" required dir="ltr"></label>
   <label class="field"><span>الباسورد (٦ حروف أو أكتر)</span><input name="p" id="p" type="password" autocomplete="new-password" minlength="6" required dir="ltr"></label>
+  ${consentBox()}
   <button class="btn primary block mt">اعمل الحساب</button></form>`;
 
 function pwSheet() {
@@ -147,7 +164,8 @@ function pwSheet() {
       f.onsubmit = async (e) => {
         e.preventDefault();
         if (f.querySelector('#n').value !== f.querySelector('#c').value) return formError(f, 'الباسورد الجديد مش متطابق');
-        try { await auth.changePassword(getUserId(), f.querySelector('#o').value, f.querySelector('#n').value); close(); toast('اتغير ✓'); } catch (err) { formError(f, err.message); }
+        if (f.querySelector('#n').value.length < 6) return formError(f, 'الباسورد الجديد لازم يكون ٦ حروف على الأقل');
+        try { await cloud.changePassword(f.querySelector('#o').value, f.querySelector('#n').value); close(); toast('اتغير ✓'); } catch (err) { formError(f, cloud.arError(err)); }
       };
     },
   });
@@ -156,7 +174,8 @@ function pwSheet() {
 function deleteSheet() {
   sheet({
     title: 'مسح الحساب',
-    body: `<p>ده هيمسح <b>كل</b> بياناتك من الجهاز ده: عباداتك، عاداتك، يومياتك، ومشاعرك. مش هينفع نرجعها.</p>
+    body: `<p>ده هيمسح <b>كل</b> بياناتك من الجهاز ده ومن السيرفر: عباداتك، عاداتك، يومياتك، ومشاعرك. مش هينفع نرجعها.</p>
+      ${cloud.currentUser() ? '<label class="field"><span>الباسورد بتاعك</span><input id="pw" type="password" dir="ltr" autocomplete="current-password"></label>' : ''}
       <p class="muted small">ننصحك تاخد نسخة احتياطية الأول.</p>
       <button class="btn soft block" id="bk">${icon('download', 18)} خد نسخة احتياطية</button>
       <label class="field mt"><span>اكتب كلمة <b>امسح</b> عشان تأكد</span><input id="c" autocomplete="off"></label>
@@ -167,6 +186,12 @@ function deleteSheet() {
       c.oninput = () => { go.disabled = c.value.trim() !== 'امسح'; };
       go.onclick = async () => {
         const id = getUserId();
+        if (cloud.currentUser()) {
+          go.disabled = true; go.textContent = 'بيمسح…';
+          stopSync();
+          try { await cloud.deleteMyAccount(b.querySelector('#pw').value); }
+          catch (err) { go.disabled = false; go.textContent = 'امسح كل حاجة'; return toast(cloud.arError(err), 'err'); }
+        }
         await removeUserData(id);
         if (id !== 'guest') auth.removeAccount(id); else auth.logout();
         sessionStorage.clear();
@@ -208,11 +233,11 @@ function settings() {
   <section class="card"><h2>الخصوصية</h2>
     ${toggle('journalLock', !!s.journalPin, '🔒 قفل اليوميات برقم سري')}
     ${s.journalPin ? '<button class="link small" data-act="lock-now">اقفل اليوميات دلوقتي</button>' : ''}
-    <p class="muted small">كل بياناتك على جهازك بس. مفيش أي حاجة بتتبعت لسيرفر.</p>
+    <p class="muted small">${cloud.currentUser() ? 'بياناتك بتتحفظ على سيرفر رحلة، والمشرف المسؤول عنك ومدير البرنامج يقدروا يشوفوا كل بياناتك ويومياتك. قفل اليوميات بيحميها من أي حد ماسك موبايلك بس.' : 'إنت في وضع الضيف: بياناتك على الجهاز ده بس ومحدش بيشوفها.'}</p>
   </section>
   <section class="card"><h2>المساعد</h2>${toggle('assistant', s.assistant, '✨ المساعد الشخصي', 'ملخصات واقتراحات من بياناتك')}</section>
   <section class="card"><h2>البيانات</h2>
-    <p class="muted small">المزامنة بين التابات المفتوحة على نفس الجهاز تلقائية. للنقل لجهاز تاني: صدّر نسخة احتياطية واسترجعها هناك.</p>
+    <p class="muted small">${cloud.currentUser() ? 'بياناتك بتتحفظ على السيرفر تلقائياً، وتقدر تدخل بحسابك من أي موبايل وتلاقيها. لو مفيش نت، بتتحفظ على الجهاز وتتبعت أول ما النت يرجع.' : 'وضع الضيف بيحفظ على الجهاز ده بس. للنقل لجهاز تاني: صدّر نسخة احتياطية واسترجعها هناك، أو اعمل حساب.'}</p>
     <a href="#/profile" class="btn soft block">${icon('download', 18)} التصدير والاسترجاع من "حسابي"</a>
     <button class="btn danger-ghost block mt-s" data-act="reset">ابدأ رحلتي من الأول (امسح التسجيلات)</button>
   </section>

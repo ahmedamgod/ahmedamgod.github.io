@@ -1,0 +1,70 @@
+rules_version = '2';
+
+// قواعد حماية رحلة
+// - كل مستخدم يقرا ويكتب بياناته هو بس
+// - المدير (الإيميل اللي تحت، بعد تأكيده) يشوف ويتحكم في كل حاجة
+// - المشرف يشوف المستخدمين المتعيّنين ليه بس، ويبعتلهم رسايل وملاحظات
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function ownerEmail() {
+      return signedIn() && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in ['OWNER_EMAIL_HERE'];
+    }
+    function staffDoc() { return get(/databases/$(database)/documents/staff/$(me())); }
+    function hasStaffDoc() { return signedIn() && exists(/databases/$(database)/documents/staff/$(me())); }
+    function isOwner() { return ownerEmail() || (hasStaffDoc() && staffDoc().data.role == 'owner'); }
+    function isStaff() { return isOwner() || (hasStaffDoc() && staffDoc().data.role == 'supervisor'); }
+    function userDoc(uid) { return get(/databases/$(database)/documents/users/$(uid)); }
+    function supervises(uid) { return isStaff() && userDoc(uid).data.supervisorId == me(); }
+    function canSee(uid) { return isOwner() || supervises(uid); }
+    function isSelf(uid) { return signedIn() && me() == uid; }
+    function notDisabled(uid) { return !exists(/databases/$(database)/documents/users/$(uid)) || userDoc(uid).data.get('disabled', false) == false; }
+    function onlyChanges(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
+
+    match /users/{uid} {
+      allow read: if isSelf(uid) || isOwner() || (isStaff() && resource.data.supervisorId == me());
+      allow create: if isSelf(uid)
+        && request.resource.data.supervisorId == null
+        && request.resource.data.disabled == false;
+      allow update: if (isSelf(uid) && notDisabled(uid)
+                        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['supervisorId', 'disabled', 'email']))
+                    || isOwner();
+      allow delete: if isSelf(uid) || isOwner();
+
+      match /data/{docId} {
+        allow read: if isSelf(uid) || canSee(uid);
+        allow write: if isSelf(uid) && notDisabled(uid);
+        allow delete: if isSelf(uid) || isOwner();
+      }
+      match /journal/{entryId} {
+        allow read: if isSelf(uid) || canSee(uid);
+        allow write: if isSelf(uid) && notDisabled(uid);
+        allow delete: if isSelf(uid) || isOwner();
+      }
+      match /inbox/{msgId} {
+        allow read: if isSelf(uid) || canSee(uid);
+        allow create: if canSee(uid) && request.resource.data.from == me();
+        allow update: if isSelf(uid) && onlyChanges(['read']);
+        allow delete: if isSelf(uid) || isOwner();
+      }
+    }
+
+    // ملاحظات المشرفين عن كل مستخدم (المستخدم نفسه مش بيشوفها)
+    match /notes/{uid} {
+      allow read, write: if canSee(uid);
+    }
+
+    match /staff/{staffId} {
+      allow read: if isSelf(staffId) || isStaff();
+      allow write: if isOwner();
+    }
+
+    match /broadcasts/{id} {
+      allow read: if signedIn();
+      allow write: if isOwner();
+    }
+  }
+}
