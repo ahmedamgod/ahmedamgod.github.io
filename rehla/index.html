@@ -15,6 +15,23 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@400;500;600;700;800&family=Marhey:wght@600;700&display=swap" rel="stylesheet">
+  <style>
+    #splash { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; background: radial-gradient(circle at 50% 40%, #FFFDF4, #F7EED6); transition: opacity .45s; font-family: system-ui, sans-serif; }
+    @media (prefers-color-scheme: dark) { #splash { background: radial-gradient(circle at 50% 40%, #2A3323, #161B13); } .splash-tag { color: #C9DAA6 !important; } }
+    #splash.hide { opacity: 0; pointer-events: none; }
+    .splash-in { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding: 24px; }
+    .splash-logo { width: min(230px, 58vw); height: auto; animation: splash-in .7s cubic-bezier(.2,.8,.2,1) both, splash-float 3.2s ease-in-out .7s infinite; filter: drop-shadow(0 14px 24px rgba(83,107,60,.25)); }
+    .splash-tag { margin: 4px 0 14px; color: #536B3C; font-weight: 700; font-size: 1.05rem; opacity: 0; animation: splash-fade .6s .35s forwards; }
+    .splash-bar { width: 120px; height: 4px; border-radius: 4px; background: rgba(145,170,98,.25); overflow: hidden; }
+    .splash-bar i { display: block; width: 40%; height: 100%; border-radius: 4px; background: #91AA62; animation: splash-load 1.2s ease-in-out infinite; }
+    .splash-help { margin-top: 18px; color: #6F7765; font-size: .9rem; }
+    .splash-help button { margin-top: 6px; border: 0; border-radius: 999px; padding: 10px 22px; background: #91AA62; color: #fff; font: inherit; font-weight: 700; }
+    @keyframes splash-in { from { opacity: 0; transform: scale(.85); } }
+    @keyframes splash-float { 50% { transform: translateY(-6px); } }
+    @keyframes splash-fade { to { opacity: 1; } }
+    @keyframes splash-load { 0% { transform: translateX(160%); } 100% { transform: translateX(-260%); } }
+  </style>
+  <link rel="preload" href="icons/logo-full.png" as="image">
   <link rel="stylesheet" href="css/app.css">
   <script>
     // لو Chrome شغال على "إصدار سطح المكتب" على موبايل، الصفحة بتتعرض بعرض كمبيوتر وكل حاجة بتصغر.
@@ -53,12 +70,33 @@
     </defs>
   </svg>
 
-  <div id="splash" aria-hidden="true">
+  <div id="splash">
     <div class="splash-in">
-      <svg width="96" height="96" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="url(#sky)"/><circle cx="32" cy="36" r="11" fill="#F7D57A"/><path d="M2 44 C 14 34 22 36 32 40 C 44 30 54 32 62 40 L62 52 A30 30 0 0 1 2 52Z" fill="#B9CD92"/><path d="M28 62 C 30 56 40 54 36 49 C 33 46 30 46 33 42" stroke="#FFF4DA" stroke-width="3.2" fill="none" stroke-linecap="round"/></svg>
-      <b>رحلة</b>
+      <img src="icons/logo-full.png" width="230" height="230" alt="رحلة" class="splash-logo">
+      <p class="splash-tag">كل يوم خطوة صغيرة 🌿</p>
+      <div class="splash-bar"><i></i></div>
+      <div class="splash-help" hidden>
+        <p>التحميل بياخد وقت أطول من العادي…</p>
+        <button type="button" id="splash-reload">إعادة تحميل</button>
+      </div>
     </div>
   </div>
+  <script>
+    // لو شاشة الفتح طوّلت: زرار بيمسح الملفات القديمة ويفتح التطبيق من جديد
+    (function () {
+      var t = setTimeout(function () { var h = document.querySelector('.splash-help'); if (h && document.getElementById('splash')) h.hidden = false; }, 7000);
+      document.getElementById('splash-reload').onclick = async function () {
+        this.textContent = 'لحظة…';
+        try {
+          var regs = await (navigator.serviceWorker ? navigator.serviceWorker.getRegistrations() : []);
+          await Promise.all(regs.map(function (r) { return r.unregister(); }));
+          var keys = await caches.keys();
+          await Promise.all(keys.filter(function (k) { return k.indexOf('rehla') === 0; }).map(function (k) { return caches.delete(k); }));
+        } catch (e) {}
+        location.reload();
+      };
+    })();
+  </script>
 
   <div id="scene" aria-hidden="true"></div>
   <a href="#main" class="skip">انتقل للمحتوى</a>

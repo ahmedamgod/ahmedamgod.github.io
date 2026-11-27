@@ -1,5 +1,5 @@
 // التحديثات: لما ينزل إصدار جديد بيظهر شريط "فيه تحديث جديد"، وتقدر كمان تدوّر يدوي من الإعدادات
-export const APP_VERSION = '1.4.3';
+export const APP_VERSION = '1.5.0';
 
 let reg = null;
 let waiting = null;
@@ -30,8 +30,10 @@ export async function initUpdates() {
   if (reg.waiting && navigator.serviceWorker.controller) setWaiting(reg.waiting);
   track(reg.installing);
   reg.addEventListener('updatefound', () => track(reg.installing));
+  const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (userRequested) location.reload();
+    else if (hadController && !waiting) setWaiting(navigator.serviceWorker.controller); // الإصدار الجديد اشتغل — نعرض "حدّث"
   });
   // دوّر على تحديث كل شوية ولما ترجع للتطبيق
   setInterval(() => reg.update().catch(() => {}), 30 * 60e3);
@@ -42,8 +44,8 @@ export function applyUpdate() {
   userRequested = true;
   const bar = document.getElementById('update-bar');
   if (bar) bar.querySelector('button').textContent = 'بيحدّث…';
-  if (waiting) waiting.postMessage({ type: 'SKIP_WAITING' });
-  else location.reload();
+  if (waiting && waiting.state === 'installed') waiting.postMessage({ type: 'SKIP_WAITING' });
+  else { location.reload(); return; }
   setTimeout(() => location.reload(), 4000); // احتياطي
 }
 
