@@ -1,6 +1,6 @@
 // Service worker: التطبيق يشتغل أوفلاين بالكامل
 // غيّر الرقم ده (ومعاه APP_VERSION في js/update.js) مع كل إصدار جديد
-const VERSION = 'rehla-v1.5.5';
+const VERSION = 'rehla-v1.6.0';
 const CORE = [
   './', './index.html', './manifest.webmanifest', './css/app.css',
   './js/app.js', './js/db.js', './js/store.js', './js/auth.js', './js/util.js', './js/ui.js', './js/art.js',
@@ -10,7 +10,7 @@ const CORE = [
   './js/screens/home.js', './js/screens/worship.js', './js/screens/habits.js', './js/screens/journal.js',
   './js/screens/mood.js', './js/screens/health.js', './js/screens/journey.js', './js/screens/achievements.js',
   './js/screens/reports.js', './js/screens/support.js', './js/screens/profile.js', './js/screens/notifications.js',
-  './js/screens/auth.js', './js/screens/onboarding.js',
+  './js/screens/auth.js', './js/screens/onboarding.js', './js/cropper.js',
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/logo-full.png',
 ];
 

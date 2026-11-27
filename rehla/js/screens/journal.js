@@ -3,6 +3,7 @@ import { today, num, esc, uid, fmtDate, relDay, parseKey, dkey, compressImage } 
 import { pageHead, sheet, toast, confirmBox, empty, segmented } from '../ui.js';
 import { icon } from '../art.js';
 import { MONTHS, DAY_SHORT } from '../data/content.js';
+import { cropImage } from '../cropper.js';
 import { currentUser } from '../cloud.js';
 
 let view = 'list';
@@ -156,9 +157,10 @@ function mountEditor(el, id) {
   paintImg();
   f.querySelector('#img').onchange = async (e) => {
     const file = e.target.files[0];
+    e.target.value = '';
     if (!file) return;
-    if (file.size > 15e6) return toast('الصورة كبيرة أوي', 'err');
-    try { image = await compressImage(file); paintImg(); } catch { toast('مقدرناش نفتح الصورة دي', 'err'); }
+    const cropped = await cropImage(file, { shape: 'rect', aspect: 4 / 3, out: 1200, quality: 0.82 });
+    if (cropped) { image = cropped; paintImg(); }
   };
   f.onsubmit = (e) => {
     e.preventDefault();

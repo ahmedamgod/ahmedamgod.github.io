@@ -8,6 +8,7 @@ import { requestPermission, tick } from '../notify.js';
 import { pinHash, lockJournal } from './journal.js';
 import * as db from '../db.js';
 import { installHelp } from '../install.js';
+import { cropImage } from '../cropper.js';
 import { APP_VERSION, hasUpdate, checkNow } from '../update.js';
 import * as cloud from '../cloud.js';
 import { flushSync, stopSync } from '../sync.js';
@@ -57,8 +58,10 @@ export default {
     if (params[0] === 'settings') return mountSettings(el);
     el.querySelector('#av')?.addEventListener('change', async (e) => {
       const f = e.target.files[0];
+      e.target.value = '';
       if (!f) return;
-      try { const img = await compressImage(f, 300, 0.8); update((s) => { s.profile.avatar = img; }); toast('صورة حلوة 😍'); } catch { toast('مقدرناش نفتح الصورة', 'err'); }
+      const img = await cropImage(f, { shape: 'circle', aspect: 1, out: 480 });
+      if (img) { update((s) => { s.profile.avatar = img; }); toast('صورة حلوة 😍'); }
     });
     el.querySelector('#imp')?.addEventListener('change', async (e) => {
       const f = e.target.files[0];
