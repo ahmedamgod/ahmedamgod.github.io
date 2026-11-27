@@ -1,6 +1,6 @@
 // Service worker: التطبيق يشتغل أوفلاين بالكامل
 // غيّر الرقم ده (ومعاه APP_VERSION في js/update.js) مع كل إصدار جديد
-const VERSION = 'rehla-v1.4.1';
+const VERSION = 'rehla-v1.4.2';
 const CORE = [
   './', './index.html', './manifest.webmanifest', './css/app.css',
   './js/app.js', './js/db.js', './js/store.js', './js/auth.js', './js/util.js', './js/ui.js', './js/art.js',
@@ -21,7 +21,7 @@ self.addEventListener('install', (e) => {
     await c.addAll(CORE.map((u) => new Request(u, { cache: 'reload' })));
     // الإصدارات القديمة (قبل ١.٣) مكانش فيها زرار تحديث، فبنحدّثها على طول
     const keys = await caches.keys();
-    if (keys.some((k) => /^rehla-v1\.[0-2]\./.test(k))) self.skipWaiting();
+    if (keys.some((k) => /^rehla-v1\.([0-2]\.|4\.[01]$)/.test(k))) self.skipWaiting();
   })());
 });
 
@@ -47,16 +47,29 @@ self.addEventListener('fetch', (e) => {
     return;
   }
   if (url.origin !== location.origin) return;
-  // ملفات التطبيق: stale-while-revalidate
-  e.respondWith(caches.open(VERSION).then(async (c) => {
+  // ملفات التطبيق: من نسخة الإصدار الحالي بس، عشان ميحصلش خلط بين ملفات إصدارين.
+  // التحديث بييجي كله مرة واحدة لما ينزل إصدار جديد (زرار "حدّث دلوقتي").
+  e.respondWith((async () => {
+    const c = await caches.open(VERSION);
     const hit = await c.match(req, { ignoreSearch: true });
-    const net = fetch(req).then((r) => { if (r.ok) c.put(req, r.clone()); return r; }).catch(() => null);
-    if (hit) { e.waitUntil(net); return hit; }
-    const r = await net;
-    if (r) return r;
-    if (req.mode === 'navigate') return c.match('./index.html');
-    return new Response('', { status: 504 });
-  }));
+    if (hit) return hit;
+    if (req.mode === 'navigate' && url.pathname.endsWith('/rehla/')) {
+      const idx = await c.match('./index.html');
+      if (idx) return idx;
+    }
+    // ملفات تانية (زي لوحة الإدارة): من النت الأول، ولو مفيش نت من آخر نسخة محفوظة
+    const extra = await caches.open(VERSION + '-extra');
+    try {
+      const r = await fetch(req);
+      if (r.ok) extra.put(req, r.clone());
+      return r;
+    } catch {
+      const old = await extra.match(req, { ignoreSearch: true });
+      if (old) return old;
+      if (req.mode === 'navigate') return (await c.match('./index.html')) || new Response('', { status: 504 });
+      return new Response('', { status: 504 });
+    }
+  })());
 });
 
 self.addEventListener('notificationclick', (e) => {
