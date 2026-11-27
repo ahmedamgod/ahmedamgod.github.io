@@ -120,6 +120,17 @@ const rerenderIfReady = () => { if (store.getState()?.onboarded) render({ keepSc
 window.addEventListener('rehla:installable', rerenderIfReady);
 window.addEventListener('rehla:installed', () => { toast('اتثبتت! هتلاقي رحلة على الشاشة الرئيسية 🎉'); rerenderIfReady(); });
 document.documentElement.classList.toggle('standalone', isStandalone());
+// لو حصل أي خطأ، نوري رسالة بدل ما التطبيق يقف ساكت
+const shownErrors = new Set();
+function reportError(msg) {
+  const m = String(msg || '').slice(0, 140);
+  if (!m || shownErrors.has(m) || /ResizeObserver|Script error/.test(m)) return;
+  shownErrors.add(m);
+  console.error(m);
+  toast('حصلت مشكلة: ' + m + ' — جرّب تقفل التطبيق وتفتحه', 'err');
+}
+window.addEventListener('error', (e) => reportError(e.message));
+window.addEventListener('unhandledrejection', (e) => { const r = e.reason; if (r?.code?.startsWith?.('auth/') || r?.name === 'FirebaseError') return; reportError(r?.message || r); });
 window.addEventListener('rehla:save-error', () => toast('مقدرناش نحفظ — ممكن مساحة الجهاز مليانة', 'err'));
 window.addEventListener('online', () => toast('رجع النت 🌿'));
 window.addEventListener('offline', () => toast('إنت أوفلاين — كل حاجة بتتحفظ على جهازك عادي', 'info'));
