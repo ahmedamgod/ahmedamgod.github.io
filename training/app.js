@@ -2062,6 +2062,17 @@
   $("#demoBanner").hidden = S.mode !== "demo";
   S.onAuth(() => route());
   S.init();
+  // phone showing the desktop version of sites (Chrome "Desktop site") makes everything tiny
+  try {
+    const small = Math.min(screen.width, screen.height) < 600;
+    const touch = navigator.maxTouchPoints > 0 || "ontouchstart" in window;
+    if (small && touch && window.innerWidth > 800) {
+      document.body.appendChild(h("div", { class: "desk-warn" },
+        h("b", null, "الشكل صغير؟ "),
+        "اقفل «Desktop site» من Chrome: افتح Chrome ← ⋮ ← شيل العلامة من Desktop site، وبعدين افتح التطبيق تاني.",
+        h("button", { type: "button", onclick: (e) => e.currentTarget.parentNode.remove() }, "✕")));
+    }
+  } catch (e) {}
   const splashStart = Date.now();
   setTimeout(() => {
     const sp = document.getElementById("splash"); if (!sp) return;
@@ -2069,7 +2080,7 @@
   }, Math.max(0, 1700 - (Date.now() - splashStart)));
 
   /* ---------- update check: shows a banner when a newer version is published ---------- */
-  const APP_VERSION = 26;
+  const APP_VERSION = 27;
   async function hardReload() {
     try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map((r) => r.unregister())); } catch (e) {}
     try { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); } catch (e) {}

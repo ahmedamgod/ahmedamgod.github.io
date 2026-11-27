@@ -382,3 +382,5 @@ code.topic { flex: 1; padding: 10px; border-radius: 8px; background: var(--bg); 
   .logo-anim, .logo-anim *, .splash * { animation-duration: .01ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; }
 }
 .logo-anim.tiny .lg-shield, .logo-anim.tiny .lg-check { animation: none; stroke-dashoffset: 0; }
+.desk-warn { position: fixed; top: 0; inset-inline: 0; z-index: 150; background: var(--orange); color: #1b1200; font-size: 28px; line-height: 1.5; padding: 18px 60px 18px 18px; font-weight: 700; }
+.desk-warn button { position: absolute; top: 12px; inset-inline-end: 12px; font-size: 28px; background: transparent; border: 0; cursor: pointer; }
