@@ -37,8 +37,9 @@ function open(img, url, { shape, aspect, out, quality }, resolve) {
       const apply = () => { im.style.width = iw * k + 'px'; im.style.height = ih * k + 'px'; im.style.transform = `translate(${tx}px,${ty}px)`; };
       const clamp = () => {
         const dw = iw * k, dh = ih * k;
-        tx = dw <= VW ? (VW - dw) / 2 : Math.min(0, Math.max(VW - dw, tx));
-        ty = dh <= VH ? (VH - dh) / 2 : Math.min(0, Math.max(VH - dh, ty));
+        // لو الصورة أكبر من الإطار: نحافظ إنها تغطّيه. لو أصغر: نخليها تتحرك جواه بحرية
+        tx = dw <= VW ? Math.min(VW - dw, Math.max(0, tx)) : Math.min(0, Math.max(VW - dw, tx));
+        ty = dh <= VH ? Math.min(VH - dh, Math.max(0, ty)) : Math.min(0, Math.max(VH - dh, ty));
       };
       const setScale = (nk) => {
         const cx = (VW / 2 - tx) / k, cy = (VH / 2 - ty) / k;
