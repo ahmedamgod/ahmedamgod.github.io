@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>رحلة · خطوة كل يوم</title>
+  <meta name="description" content="رحلة — تطبيقك لتنظيم عباداتك وعاداتك وصحتك ومشاعرك، خطوة صغيرة كل يوم.">
+  <meta name="theme-color" content="#FFF9EB">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="رحلة">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@400;500;600;700;800&family=Marhey:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+  <script>
+    // لو Chrome شغال على "إصدار سطح المكتب" على موبايل، الصفحة بتتعرض بعرض كمبيوتر وكل حاجة بتصغر.
+    // هنا بنكبّر التطبيق عشان يملا شاشة الموبايل زي أي تطبيق.
+    (function () {
+      function fit() {
+        var el = document.documentElement;
+        var touch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+        var sw = screen.width, w = window.innerWidth;
+        var z = touch && sw && w > sw * 1.25 ? w / sw : 1;
+        el.style.zoom = z === 1 ? '' : z.toFixed(3);
+        el.style.setProperty('--z', z.toFixed(3));
+      }
+      fit();
+      addEventListener('resize', fit);
+      addEventListener('orientationchange', function () { setTimeout(fit, 300); });
+    })();
+  </script>
+</head>
+<body>
+  <!-- فلاتر الألوان المائية المشتركة لكل الرسومات -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <filter id="wc" x="-20%" y="-20%" width="140%" height="140%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="3" result="n"/>
+        <feDisplacementMap in="SourceGraphic" in2="n" scale="7" xChannelSelector="R" yChannelSelector="G" result="d"/>
+        <feGaussianBlur in="d" stdDeviation="0.8"/>
+      </filter>
+      <filter id="wcs" x="-20%" y="-20%" width="140%" height="140%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.08" numOctaves="2" seed="7" result="n"/>
+        <feDisplacementMap in="SourceGraphic" in2="n" scale="2.5" xChannelSelector="R" yChannelSelector="G"/>
+      </filter>
+      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#FCE6C8"/><stop offset=".6" stop-color="#FFF4DA"/><stop offset="1" stop-color="#EEF3DF"/>
+      </linearGradient>
+    </defs>
+  </svg>
+
+  <div id="splash" aria-hidden="true">
+    <div class="splash-in">
+      <svg width="96" height="96" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="url(#sky)"/><circle cx="32" cy="36" r="11" fill="#F7D57A"/><path d="M2 44 C 14 34 22 36 32 40 C 44 30 54 32 62 40 L62 52 A30 30 0 0 1 2 52Z" fill="#B9CD92"/><path d="M28 62 C 30 56 40 54 36 49 C 33 46 30 46 33 42" stroke="#FFF4DA" stroke-width="3.2" fill="none" stroke-linecap="round"/></svg>
+      <b>رحلة</b>
+    </div>
+  </div>
+
+  <div id="scene" aria-hidden="true"></div>
+  <a href="#main" class="skip">انتقل للمحتوى</a>
+  <main id="main" tabindex="-1"></main>
+  <nav id="nav" class="bottom-nav" aria-label="التنقل الرئيسي" hidden></nav>
+  <div id="toasts" aria-live="polite"></div>
+
+  <noscript><p style="padding:24px;text-align:center">رحلة محتاجة JavaScript عشان تشتغل.</p></noscript>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
